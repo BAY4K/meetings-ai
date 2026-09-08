@@ -15,7 +15,7 @@ app = FastAPI()
 
 @app.get("/")
 def root():
-    return {"message": "Hello World"}
+    return FileResponse("app/static/index.html")
 
 @app.get("/health")
 def health():
@@ -40,10 +40,6 @@ async def upload(file: UploadFile = File()):
         "filename": file.filename,
         "filepath": file_path,
     }
-
-@app.get("/app")
-def web_app():
-    return FileResponse("app/static/index.html")
 
 
 if __name__ == "__main__":
