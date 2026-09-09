@@ -1,9 +1,14 @@
-from email import message
+from pathlib import Path
+from contextlib import asynccontextmanager
+from uuid import uuid4
+import aiofiles
 
 import uvicorn
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
-from pathlib import Path
+from starlette.concurrency import run_in_threadpool
+
+from app.asr.transcriber import Transcriber
 
 
 UPLOAD_DIR = Path("uploads")
@@ -11,7 +16,20 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a"}
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print('Loading ASR model...')
+
+    app.state.transcriber = Transcriber()
+
+    print('ASR ready...')
+
+    yield
+
+    app.state.transcriber = None
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 def root():
@@ -23,22 +41,32 @@ def health():
 
 @app.post("/upload")
 async def upload(file: UploadFile = File()):
-    extensions = Path(file.filename).suffix.lower()
+    original_name = Path(file.filename).name
+    extension = Path(original_name).suffix.lower()
 
-    if extensions not in ALLOWED_EXTENSIONS:
-        return {
-            "error": "Unsupported file type"
-        }
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Only mp3, wav, and m4a are supported.",
+        )
 
-    file_path = UPLOAD_DIR / file.filename
+    stored_name = f'{uuid4().hex}{extension}'
+    file_path = UPLOAD_DIR / stored_name
 
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
+    async with aiofiles.open(file_path, mode="wb") as output:
+        while chunk := await file.read(1024 * 1024):
+            await output.write(chunk)
 
-    return {
-        "message": "Uploaded file",
-        "filename": file.filename,
-        "filepath": file_path,
+    result = await run_in_threadpool(
+        app.state.transcriber.transcribe,
+        file_path,
+    )
+
+    return  {
+        'filename': original_name,
+        'language': result['language'],
+        'transcript': result['transcript'],
+        'segments': result['segments'],
     }
 
 
