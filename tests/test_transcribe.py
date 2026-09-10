@@ -3,15 +3,15 @@ from app.asr.transcriber import Transcriber
 
 transcriber = Transcriber()
 
-result = transcriber.transcribe('test.m4a')
+result = transcriber.transcribe("test.m4a")
 
-print('\n ========= Transcribe ==========')
-print(result['transcript'])
+print("\n========== DIARIZED TRANSCRIPT ==========\n")
+print(result["transcript"])
 
-print('\n ========== Segments ==========')
+print("\n========== SPEAKER TURNS ==========\n")
 
-for segment in result['segments']:
+for turn in result["speaker_turns"]:
     print(
-        f"[{segment['start']:.2f} -> {segment['end']:.2f}] "
-        f"{segment['text']}"
+        f"[{turn['start']:.2f} -> {turn['end']:.2f}] "
+        f"{turn['speaker']}: {turn['text']}"
     )

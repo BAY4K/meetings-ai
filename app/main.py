@@ -66,7 +66,7 @@ async def upload(file: UploadFile = File()):
         'filename': original_name,
         'language': result['language'],
         'transcript': result['transcript'],
-        'segments': result['segments'],
+        'speaker_turns': result['speaker_turns'],
     }
 
 
