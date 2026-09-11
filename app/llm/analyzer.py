@@ -1,4 +1,8 @@
+from pathlib import Path
+
 import httpx
+
+from app.schemas.meeting import MeetingProtocol
 
 
 class Analyzer:
@@ -7,22 +11,43 @@ class Analyzer:
             model_name: str = 'qwen3:8b',
             base_url: str = 'http://127.0.0.1:11434',
             timeout: float= 300.0,
+            prompt_path: str | Path | None = None,
             ):
         self.model_name = model_name
         self.base_url = base_url
         self.timeout = timeout
 
-    def analyze(self, transcript: str) -> str:
+        if prompt_path is None:
+            prompt_path = (
+                Path(__file__).resolve().parents[1]
+                / 'prompts'
+                / 'meeting_system.txt'
+            )
+
+        self.system_prompt = Path(prompt_path).read_text(
+            encoding='utf-8'
+        )
+
+
+    def analyze(self, transcript: str) -> MeetingProtocol:
         payload = {
             'model': self.model_name,
             'messages': [
                 {
+                    'role': 'system',
+                    'content': self.system_prompt,
+                },
+                {
                     'role': 'user',
-                    'content': transcript,
+                    'content': (
+                        'Проанализируй следующую расшифровку встречи:\n\n'
+                        f'{transcript}'
+                    ),
                 }
             ],
             'stream': False,
             'think': False,
+            'format': MeetingProtocol.model_json_schema(),
             'options': {
                 'temperature': 0,
             },
@@ -46,4 +71,6 @@ class Analyzer:
 
         data = response.json()
 
-        return data['message']['content']
+        content = data['message']['content']
+
+        return MeetingProtocol.model_validate_json(content)
