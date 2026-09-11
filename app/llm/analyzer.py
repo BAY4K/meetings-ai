@@ -2,7 +2,7 @@ from pathlib import Path
 
 import httpx
 
-from app.schemas.meeting import MeetingProtocol
+from app.schemas.meeting import MeetingExtraction
 
 
 class Analyzer:
@@ -29,7 +29,7 @@ class Analyzer:
         )
 
 
-    def analyze(self, transcript: str) -> MeetingProtocol:
+    def analyze(self, transcript: str) -> MeetingExtraction:
         payload = {
             'model': self.model_name,
             'messages': [
@@ -47,7 +47,7 @@ class Analyzer:
             ],
             'stream': False,
             'think': False,
-            'format': MeetingProtocol.model_json_schema(),
+            'format': MeetingExtraction.model_json_schema(),
             'options': {
                 'temperature': 0,
             },
@@ -73,4 +73,4 @@ class Analyzer:
 
         content = data['message']['content']
 
-        return MeetingProtocol.model_validate_json(content)
+        return MeetingExtraction.model_validate_json(content)

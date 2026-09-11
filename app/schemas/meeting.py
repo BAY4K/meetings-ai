@@ -3,23 +3,20 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
-class DecisionSection(BaseModel):
+class ProtocolItem(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    text: str
-    status: Literal['active', 'superseded', 'cancelled']
-    evidence: list[str]
-
-
-class Task(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    kind: Literal['decision', 'task']
 
     text: str
+
     responsible_name: str | None = None
     responsible_speaker: str | None = None
     deadline: str | None = None
-    status: Literal['accepted', 'cancelled']
-    evidence: str
+
+    active: bool
+
+    evidence: list[str]
 
 
 class DiscussionSection(BaseModel):
@@ -32,8 +29,7 @@ class DiscussionSection(BaseModel):
 
     summary: str
 
-    description: list[DecisionSection]
-    tasks: list[Task]
+    items: list[ProtocolItem]
 
 
 class MeetingExtraction(BaseModel):
