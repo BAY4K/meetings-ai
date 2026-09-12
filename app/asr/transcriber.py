@@ -88,7 +88,7 @@ class Transcriber:
         # Разбиваем на спикеров
         diarize_segments = self.diarize_model(
             audio_path,
-            min_speakers=3,
+            min_speakers=2,
             max_speakers=4,
         )
 

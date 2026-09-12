@@ -10,6 +10,9 @@ from starlette.concurrency import run_in_threadpool
 
 from app.asr.transcriber import Transcriber
 
+from app.llm.analyzer import Analyzer
+from app.services.meeting_pipeline import MeetingPipeline
+
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -24,6 +27,13 @@ async def lifespan(app: FastAPI):
     app.state.transcriber = Transcriber()
 
     print('ASR ready...')
+
+    analyzer = Analyzer()
+
+    app.state.pipeline = MeetingPipeline(
+        transcriber=app.state.transcriber,
+        analyzer=analyzer,
+    )
 
     yield
 
@@ -67,6 +77,38 @@ async def upload(file: UploadFile = File()):
         'language': result['language'],
         'transcript': result['transcript'],
         'speaker_turns': result['speaker_turns'],
+    }
+
+@app.post("/process")
+async def process(file: UploadFile = File()):
+    original_name = Path(file.filename).name
+
+    extension = Path(original_name).suffix.lower()
+
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Only mp3, wav, and m4a are supported.",
+        )
+
+    stored_name = f'{uuid4().hex}{extension}'
+    file_path = UPLOAD_DIR / stored_name
+
+    async with aiofiles.open(file_path, mode="wb") as output:
+        while chunk := await file.read(1024 * 1024):
+            await output.write(chunk)
+
+    result = await run_in_threadpool(
+        app.state.pipeline.process,
+        file_path,
+    )
+
+    return {
+        'filename': original_name,
+        'language': result['language'],
+        'transcript': result['transcript'],
+        'speaker_turns': result['speaker_turns'],
+        'extraction': result['extraction'].model_dump(),
     }
 
 
