@@ -1,7 +1,7 @@
 from app.llm.analyzer import Analyzer
 
-
 analyzer = Analyzer()
+
 
 cases = {
 

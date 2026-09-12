@@ -12,6 +12,7 @@ from app.asr.transcriber import Transcriber
 
 from app.llm.analyzer import Analyzer
 from app.services.meeting_pipeline import MeetingPipeline
+from app.docx.generator import ProtocolDocxGenerator
 
 
 UPLOAD_DIR = Path("uploads")
@@ -28,11 +29,14 @@ async def lifespan(app: FastAPI):
 
     print('ASR ready...')
 
-    analyzer = Analyzer()
+    app.state.analyzer = Analyzer()
+
+    app.state.docx_generator = ProtocolDocxGenerator()
 
     app.state.pipeline = MeetingPipeline(
         transcriber=app.state.transcriber,
-        analyzer=analyzer,
+        analyzer=app.state.analyzer,
+        docx_generator=app.state.docx_generator,
     )
 
     yield
@@ -98,9 +102,18 @@ async def process(file: UploadFile = File()):
         while chunk := await file.read(1024 * 1024):
             await output.write(chunk)
 
+    OUTPUT_DIR = Path('outputs')
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    output_path = (
+            OUTPUT_DIR
+            / f'{Path(original_name).stem}_{uuid4().hex}.docx'
+    )
+
     result = await run_in_threadpool(
         app.state.pipeline.process,
         file_path,
+        output_path
     )
 
     return {
@@ -109,6 +122,7 @@ async def process(file: UploadFile = File()):
         'transcript': result['transcript'],
         'speaker_turns': result['speaker_turns'],
         'extraction': result['extraction'].model_dump(),
+        'docx_path': str(result['docx_path']),
     }
 
 
