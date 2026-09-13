@@ -18,6 +18,9 @@ from app.docx.generator import ProtocolDocxGenerator
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+OUTPUT_DIR = Path('outputs')
+OUTPUT_DIR.mkdir(exist_ok=True)
+
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a"}
 
 
@@ -102,12 +105,11 @@ async def process(file: UploadFile = File()):
         while chunk := await file.read(1024 * 1024):
             await output.write(chunk)
 
-    OUTPUT_DIR = Path('outputs')
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    file_id = uuid4().hex
 
     output_path = (
             OUTPUT_DIR
-            / f'{Path(original_name).stem}_{uuid4().hex}.docx'
+            / f'{file_id}.docx'
     )
 
     result = await run_in_threadpool(
@@ -122,8 +124,38 @@ async def process(file: UploadFile = File()):
         'transcript': result['transcript'],
         'speaker_turns': result['speaker_turns'],
         'extraction': result['extraction'].model_dump(),
-        'docx_path': str(result['docx_path']),
+        'download_url': f'/download/{file_id}',
     }
+
+async def download(file_id: str):
+    if (
+        len(file_id) != 32
+        or not all(
+            char in '0123456789abcdef'
+            for char in file_id
+        )
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Invalid file ID.",
+        )
+
+    file_path = OUTPUT_DIR / f'{file_id}.docx'
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="File not found.",
+        )
+
+    return FileResponse(
+        str(file_path),
+        media_type=(
+            'application/'
+            'vnd.openxmlformats-officedocument.'
+            'wordprocessingml.document'
+        ),
+        filename='result.docx',
+    )
 
 
 if __name__ == "__main__":
