@@ -127,6 +127,7 @@ async def process(file: UploadFile = File()):
         'download_url': f'/download/{file_id}',
     }
 
+@app.get("/download/{file_id}")
 async def download(file_id: str):
     if (
         len(file_id) != 32
@@ -141,6 +142,7 @@ async def download(file_id: str):
         )
 
     file_path = OUTPUT_DIR / f'{file_id}.docx'
+
     if not file_path.exists():
         raise HTTPException(
             status_code=404,
