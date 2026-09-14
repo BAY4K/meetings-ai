@@ -31,7 +31,7 @@ async def download(file_id: str):
 
     file_path = (
             OUTPUT_DIR
-            / f"{normalized_id}.docx_generator"
+            / f"{normalized_id}.docx"
     )
 
     if not file_path.is_file():
@@ -43,10 +43,10 @@ async def download(file_id: str):
     return FileResponse(
         str(file_path),
         media_type=DOCX_MEDIA_TYPE,
-        filename='result.docx_generator',
+        filename='result.docx',
     )
 
-@router.get("/export/docx")
+@router.post("/export/docx")
 async def export_docx(request: Request, extraction: MeetingExtraction):
     buffer = (
         request.app.state.docx_generator.generate_bytes(extraction)

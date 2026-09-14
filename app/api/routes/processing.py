@@ -14,7 +14,7 @@ router = APIRouter(
     tags=["processing"],
 )
 
-async def _save_audio_file(file: UploadFile = File(...)) -> tuple[str, Path]:
+async def _save_audio_file(file: UploadFile) -> tuple[str, Path]:
     original_name = Path(file.filename or '').name
 
     if not original_name:

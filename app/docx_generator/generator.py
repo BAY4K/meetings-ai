@@ -16,7 +16,7 @@ class ProtocolDocxGenerator:
         if template_path is None:
             template_path = (Path(__file__).parents[1]
                              / 'templates'
-                             / 'protocol_template.docx_generator')
+                             / 'protocol_template.docx')
 
         self.template_path = Path(template_path)
 
