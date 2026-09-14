@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.asr.transcriber import Transcriber
 from app.llm.analyzer import Analyzer
-from app.docx.generator import ProtocolDocxGenerator
+from app.docx_generator.generator import ProtocolDocxGenerator
 
 
 class MeetingPipeline:

@@ -48,8 +48,10 @@ class Analyzer:
             'stream': False,
             'think': False,
             'format': MeetingExtraction.model_json_schema(),
+            'keep_alive': 0,
             'options': {
                 'temperature': 0,
+                'num_gpu': 20,
             },
         }
 

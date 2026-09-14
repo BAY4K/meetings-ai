@@ -1,8 +1,8 @@
+from io import BytesIO
 from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-# from docx.oxml.ns import qn
 from docx.shared import Pt
 
 from app.schemas.meeting import MeetingExtraction
@@ -16,19 +16,48 @@ class ProtocolDocxGenerator:
         if template_path is None:
             template_path = (Path(__file__).parents[1]
                              / 'templates'
-                             / 'protocol_template.docx')
+                             / 'protocol_template.docx_generator')
 
         self.template_path = Path(template_path)
 
+    # Сохранение в папку проекта
     def generate(
             self,
             extraction: MeetingExtraction,
             output_path: str | Path,
     ) -> Path:
         output_path = Path(output_path)
+
         output_path.parent.mkdir(
             parents=True, exist_ok=True
         )
+
+        doc = self._build_document(extraction)
+
+        # Сохраняем документ
+        doc.save(output_path)
+
+        return output_path
+
+    # Без сохранения файла в проекте, сохраняя в оперативную память
+    def generate_bytes(
+            self,
+            extraction: MeetingExtraction,
+    ) -> BytesIO:
+        doc = self._build_document(extraction)
+
+        buffer = BytesIO()
+
+        doc.save(buffer)
+
+        buffer.seek(0)
+
+        return buffer
+
+    def _build_document(
+            self,
+            extraction: MeetingExtraction,
+    ):
         # Открываем шаблон
         doc = Document(self.template_path)
 
@@ -59,10 +88,8 @@ class ProtocolDocxGenerator:
 
         self._remove_paragraph(end_marker)
 
-        # Сохраняем документ
-        doc.save(output_path)
+        return doc
 
-        return output_path
 
     @staticmethod
     def _find_paragraph(doc, text: str):

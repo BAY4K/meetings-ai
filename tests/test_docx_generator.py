@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.docx.generator import (
+from app.docx_generator.generator import (
     ProtocolDocxGenerator,
 )
 from app.schemas.meeting import (
@@ -63,7 +63,7 @@ generator = ProtocolDocxGenerator()
 result = generator.generate(
     extraction=extraction,
     output_path=Path(
-        "outputs/test_protocol.docx"
+        "outputs/test_protocol.docx_generator"
     ),
 )
 
