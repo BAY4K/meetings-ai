@@ -40,7 +40,6 @@ class Analyzer:
                 {
                     'role': 'user',
                     'content': (
-                        'Проанализируй следующую расшифровку встречи:\n\n'
                         f'{transcript}'
                     ),
                 }
@@ -51,7 +50,7 @@ class Analyzer:
             'keep_alive': 0,
             'options': {
                 'temperature': 0,
-                'num_gpu': 20,
+                # 'num_gpu': 20,
             },
         }
 

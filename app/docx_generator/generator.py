@@ -39,7 +39,7 @@ class ProtocolDocxGenerator:
 
         return output_path
 
-    # Без сохранения файла в проекте, сохраняя в оперативную память
+    # Без сохранения файла в проекте, сохраняя в оперативную память (не стал реализовывать для тестового задания)
     def generate_bytes(
             self,
             extraction: MeetingExtraction,

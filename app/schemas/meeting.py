@@ -1,41 +1,34 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ProtocolItem(BaseModel):
+class ResolutionItem(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    kind: Literal['decision', 'task']
-
+    # Текст решения
     text: str
-
+    # Кто исполняет
     responsible_name: str | None = None
     responsible_speaker: str | None = None
+    # На какой срок
     deadline: str | None = None
+    # Дословный транскрипт свидетельствующий об этом
+    evidence: str | None = None
 
-    active: bool
-
-    evidence: list[str]
-
-
-class DiscussionSection(BaseModel):
+class HeardBlock(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    topic: str
-
+    #Докладчик
+    speaker_id: str
     speaker_name: str | None = None
-    speaker_id: str | None = None
-
     summary: str
-
-    items: list[ProtocolItem]
-
+    resolutions: list[ResolutionItem] = Field(default_factory=list)
 
 class MeetingExtraction(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    sections: list[DiscussionSection]
+    heard: list[HeardBlock] = Field(default_factory=list)
 
-    unresolved_questions: list[str]
-    ambiguous_fragments: list[str]
+    unresolved_questions: list[str] = Field(default_factory=list)
+    ambiguous_fragments: list[str] = Field(default_factory=list)
