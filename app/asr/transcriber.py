@@ -10,17 +10,17 @@ from whisperx.diarize import DiarizationPipeline
 class Transcriber:
     def __init__(
             self,
-            model_name: str = 'medium',
+            model_name: str = 'large-v3',
             device: str = 'cuda',
-            diarization_device: str = 'cpu',
+            diarization_device: str = 'cuda',
             diarization_model: str = (
                 "pyannote/speaker-diarization-community-1"
             ),
             compute_type: str = 'float16',
-            batch_size: int = 4,
+            batch_size: int = 1,
             language: str = 'ru',
-            vad_onset: float = 0.5,
-            vad_offset: float = 0.363,
+            vad_onset: float = 0.35,
+            vad_offset: float = 0.25,
             ):
         self.model_name = model_name
         self.device = device
@@ -46,11 +46,26 @@ class Transcriber:
 
         print('ASR pipeline ready...')
 
-    def transcribe(self, audio_path: str | Path) -> dict:
+    def transcribe(
+            self,
+            audio_path: str | Path,
+            *,
+            num_speakers: int | None = None,
+            hotwords: str | None = None,
+            initial_prompt: str | None = None,
+    ) -> dict:
         audio_path = str(audio_path)
 
         # Загружаем аудио
         audio = whisperx.load_audio(audio_path)
+
+        asr_options = {
+            'beam_size': 5,
+            'condition_on_previous_text': False,
+            'initial_prompt': initial_prompt,
+            'hotwords': hotwords,
+            'suppress_numerals': False,
+        }
 
         print('Loading WhisperX model...')
 
@@ -59,6 +74,12 @@ class Transcriber:
             self.device,
             compute_type=self.compute_type,
             language=self.language,
+            asr_options=asr_options,
+            vad_options={
+                'vad_onset': self.vad_onset,
+                'vad_offset': self.vad_offset,
+                'chunk_size': 30,
+            },
         )
 
         try:
@@ -67,6 +88,8 @@ class Transcriber:
                 audio,
                 batch_size = self.batch_size,
             )
+
+            raw_segments = result['segments']
         finally:
             del model
             self._clear_cuda()
@@ -128,6 +151,7 @@ class Transcriber:
             "language" : result['language'],
             "transcript" : transcript,
             'speaker_turns' : speaker_turns,
+            'raw_segments': raw_segments,
             'segments' : (result_with_speakers['segments']),
         }
 
