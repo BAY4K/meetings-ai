@@ -1,6 +1,8 @@
+import gc
 import os
 from pathlib import Path
 
+import torch
 import whisperx
 from whisperx.diarize import DiarizationPipeline
 
@@ -16,52 +18,33 @@ class Transcriber:
             ),
             compute_type: str = 'float16',
             batch_size: int = 4,
-            language: str = 'ru'
+            language: str = 'ru',
+            vad_onset: float = 0.5,
+            vad_offset: float = 0.363,
             ):
+        self.model_name = model_name
         self.device = device
         self.diarization_device = diarization_device
         self.diarization_model = diarization_model
+        self.compute_type = compute_type
         self.batch_size = batch_size
         self.language = language
 
+        self.vad_onset = vad_onset
+        self.vad_offset = vad_offset
+
         hf_token = os.getenv('HF_TOKEN')
 
-        # if not hf_token:
-        #     raise RuntimeError(
-        #         "HF_TOKEN is not set"
-        #         "It is required for speaker diarization"
-        #     )
-
-        print('Loading whisperx model...')
+        print('Loading diarization model...')
 
         #Запуск модели whisperx
-        self.model = whisperx.load_model(
-            model_name,
-            device,
-            compute_type = compute_type,
-            language = language,
-        )
-
-        print('Loading alignment model...')
-
-        #Запуск русской модели выравнивания данных
-        self.align_model, self.align_metadata = (
-            whisperx.load_align_model(
-                language_code = language,
-                device = device,
-            )
-        )
-
-        print("Loading diarization model...")
-
-        #Запуск разделения речи по спикерам
         self.diarize_model = DiarizationPipeline(
             model_name=diarization_model,
             token=hf_token,
             device=self.diarization_device,
         )
 
-        print("ASR pipeline ready.")
+        print('ASR pipeline ready...')
 
     def transcribe(self, audio_path: str | Path) -> dict:
         audio_path = str(audio_path)
@@ -69,21 +52,53 @@ class Transcriber:
         # Загружаем аудио
         audio = whisperx.load_audio(audio_path)
 
-        # Распознаём речь
-        result = self.model.transcribe(
-            audio,
-            batch_size = self.batch_size,
+        print('Loading WhisperX model...')
+
+        model = whisperx.load_model(
+            self.model_name,
+            self.device,
+            compute_type=self.compute_type,
+            language=self.language,
         )
 
-        # Запускаем выравнивание текста
-        aligned_result = whisperx.align(
-            result['segments'],
-            self.align_model,
-            self.align_metadata,
-            audio,
-            self.device,
-            return_char_alignments = False,
+        try:
+            # Распознаём речь
+            result = model.transcribe(
+                audio,
+                batch_size = self.batch_size,
+            )
+        finally:
+            del model
+            self._clear_cuda()
+
+        print('WhisperX model released.')
+
+        print('Loading alignment model...')
+
+        # Запускаем модель выравнивания
+        align_model, align_metadata = (
+            whisperx.load_align_model(
+                language_code=self.language,
+                device=self.device,
+            )
         )
+
+        try:
+            aligned_result = whisperx.align(
+                result['segments'],
+                align_model,
+                align_metadata,
+                audio,
+                self.device,
+                return_char_alignments = False,
+            )
+        finally:
+            del align_model
+            del align_metadata
+
+            self._clear_cuda()
+
+        print('Alignment model released.')
 
         # Разбиваем на спикеров
         diarize_segments = self.diarize_model(
@@ -93,24 +108,45 @@ class Transcriber:
         )
 
         # Сопоставляем спикеров со словами
-        result_with_speakers = whisperx.assign_word_speakers(
-            diarize_segments,
-            aligned_result,
+        result_with_speakers = (
+            whisperx.assign_word_speakers(
+                diarize_segments,
+                aligned_result,
+            )
         )
 
         # Конвертация формата whisperx к нужному нам формату
-        speaker_turns = self._build_speakers_turn(
-            result_with_speakers['segments']
+        speaker_turns = (
+            self._build_speakers_turn(
+                result_with_speakers['segments']
+            )
         )
 
         transcript = self._build_transcript(speaker_turns)
 
-        return {
+        response = {
             "language" : result['language'],
             "transcript" : transcript,
             'speaker_turns' : speaker_turns,
-            'segments' : result_with_speakers['segments'],
+            'segments' : (result_with_speakers['segments']),
         }
+
+        del audio
+        del aligned_result
+        del diarize_segments
+        del result_with_speakers
+        del result
+
+        self._clear_cuda()
+
+        return response
+
+    @staticmethod
+    def _clear_cuda():
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     #Метод для распределения слов по ролям(разбивание реплик)
     def _build_speakers_turn(self, segments: list[dict]) -> list[dict]:

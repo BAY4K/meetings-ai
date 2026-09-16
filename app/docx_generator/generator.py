@@ -1,4 +1,3 @@
-from io import BytesIO
 from pathlib import Path
 
 from docx import Document
@@ -34,34 +33,17 @@ class ProtocolDocxGenerator:
 
         doc = self._build_document(extraction)
 
-        # Сохраняем документ
         doc.save(output_path)
 
         return output_path
 
-    # Без сохранения файла в проекте, сохраняя в оперативную память (не стал реализовывать для тестового задания)
-    def generate_bytes(
-            self,
-            extraction: MeetingExtraction,
-    ) -> BytesIO:
-        doc = self._build_document(extraction)
-
-        buffer = BytesIO()
-
-        doc.save(buffer)
-
-        buffer.seek(0)
-
-        return buffer
-
+    # Выстраиваем документ
     def _build_document(
             self,
             extraction: MeetingExtraction,
     ):
-        # Открываем шаблон
         doc = Document(self.template_path)
 
-        # Находим нужные участки
         heard_heading = self._find_paragraph(
             doc,
             'Заслушали:',
@@ -72,25 +54,23 @@ class ProtocolDocxGenerator:
             '[При необходимости добавить',
         )
 
-        # Убираем placeholder'ы (заглушки)
         self._remove_placeholder_blocks(
             doc,
             start_paragraph=heard_heading,
             end_paragraph=end_marker,
         )
 
-        # Вставляем наш текст
-        for section in extraction.sections:
-            self._insert_section(
+        for block in extraction.heard:
+            self._insert_heard_block(
                 anchor=end_marker,
-                section=section,
+                block=block,
             )
 
         self._remove_paragraph(end_marker)
 
         return doc
 
-
+    #Метод для поиска нужной строки
     @staticmethod
     def _find_paragraph(doc, text: str):
         for paragraph in doc.paragraphs:
@@ -101,6 +81,7 @@ class ProtocolDocxGenerator:
             f"Paragraph was not found in {text}"
         )
 
+    # Альтернативный поиск строки, который начинается с определённого текста
     @staticmethod
     def _find_paragraph_starting_with(doc, text: str):
         for paragraph in doc.paragraphs:
@@ -111,6 +92,7 @@ class ProtocolDocxGenerator:
             f"Paragraph was not found in {text}"
         )
 
+    # Функция для удаления текста заглушек
     def _remove_placeholder_blocks(
             self,
             doc,
@@ -136,6 +118,7 @@ class ProtocolDocxGenerator:
         ]:
             self._remove_paragraph(paragraph)
 
+    # Функция, удаляющая строку
     @staticmethod
     def _remove_paragraph(paragraph):
         element = paragraph._element
@@ -143,6 +126,7 @@ class ProtocolDocxGenerator:
 
         parent.remove(element)
 
+    # Применение стилей для сгенерированного текста
     @staticmethod
     def _add_run(
             paragraph,
@@ -160,21 +144,19 @@ class ProtocolDocxGenerator:
 
         return run
 
-
-    def _insert_section(
+    # Вставка текста
+    def _insert_heard_block(
             self,
             anchor,
-            section,
+            block,
     ):
-        speaker = self._section_heading(section)
-
         speaker_paragraph = (
             anchor.insert_paragraph_before()
         )
 
         self._add_run(
             speaker_paragraph,
-            speaker,
+            self._speaker_heading(block),
             bold=True,
         )
 
@@ -188,16 +170,10 @@ class ProtocolDocxGenerator:
 
         self._add_run(
             summary_paragraph,
-            section.summary,
+            block.summary,
         )
 
-        active_items = [
-            item
-            for item in section.items
-            if item.active
-        ]
-
-        if not active_items:
+        if not block.resolutions:
             return
 
         decision_heading = (
@@ -210,42 +186,55 @@ class ProtocolDocxGenerator:
             bold=True,
         )
 
-        for item in active_items:
-            item_paragraph = (
+        for resolution in block.resolutions:
+            resolution_paragraph = (
                 anchor.insert_paragraph_before()
             )
 
-            text = self._format_item(item)
-
             self._add_run(
-                item_paragraph,
-                text,
+                resolution_paragraph,
+                self._format_resolution(resolution),
             )
 
+    # Вставка оглавления (Спикера/Докладчика)
+    @classmethod
+    def _speaker_heading(cls, block) -> str:
+        if block.speaker_name:
+            return block.speaker_name
+
+        return cls._format_speaker_id(
+            block.speaker_id
+        )
+
+    # Форматирование Спикера, если не нашёл имя
     @staticmethod
-    def _section_heading(section) -> str:
-        if section.speaker_name:
-            return section.speaker_name
+    def _format_speaker_id(speaker_id: str) -> str:
+        try:
+            number = int(
+                speaker_id.rsplit('_', 1)[1]
+            )
 
-        if section.speaker_id:
-            return section.speaker_id
+            return f'Спикер {number + 1}'
 
-        return section.topic
+        except (ValueError, IndexError):
+            return 'Спикер'
 
+    # Форматирование решений
     @staticmethod
-    def _format_item(item) -> str:
+    def _format_resolution(resolution) -> str:
         parts = [
-            item.text.rstrip('.')
+            resolution.text.rstrip('.')
         ]
 
-        if item.kind == 'task':
-            if item.responsible_name:
-                parts.append(
-                    f'Ответственный — {item.responsible_name}'
-                )
+        if resolution.responsible_name:
+            parts.append(
+                f'Ответственный — '
+                f'{resolution.responsible_name}'
+            )
 
-            if item.deadline:
-                parts.append(
-                    f'срок — {item.deadline}'
-                )
-        return  '— ' + '; '.join(parts) + '.'
+        if resolution.deadline:
+            parts.append(
+                f'срок — {resolution.deadline}'
+            )
+
+        return '— ' + '; '.join(parts) + '.'

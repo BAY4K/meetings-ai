@@ -45,17 +45,3 @@ async def download(file_id: str):
         media_type=DOCX_MEDIA_TYPE,
         filename='result.docx',
     )
-
-@router.post("/export/docx")
-async def export_docx(request: Request, extraction: MeetingExtraction):
-    buffer = (
-        request.app.state.docx_generator.generate_bytes(extraction)
-    )
-
-    return StreamingResponse(
-        buffer,
-        media_type=DOCX_MEDIA_TYPE,
-        headers={
-            'Content-Disposition': 'attachment; filename="protocol.docx"'
-        }
-    )
