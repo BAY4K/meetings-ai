@@ -28,7 +28,6 @@ class Analyzer:
             encoding='utf-8'
         )
 
-
     def analyze(self, transcript: str) -> MeetingExtraction:
         payload = {
             'model': self.model_name,
@@ -50,6 +49,7 @@ class Analyzer:
             'keep_alive': 0,
             'options': {
                 'temperature': 0,
+                # 'num_ctx': 6144,
                 # 'num_gpu': 20,
             },
         }

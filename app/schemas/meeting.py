@@ -14,7 +14,7 @@ class ResolutionItem(BaseModel):
     # На какой срок
     deadline: str | None = None
     # Дословный транскрипт свидетельствующий об этом
-    evidence: str | None = None
+    evidence: list[str] = Field(default_factory=list)
 
 class HeardBlock(BaseModel):
     model_config = ConfigDict(extra='forbid')
