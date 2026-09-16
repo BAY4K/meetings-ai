@@ -3,7 +3,7 @@ from app.asr.transcriber import Transcriber
 
 transcriber = Transcriber()
 
-result = transcriber.transcribe("test.m4a")
+result = transcriber.transcribe("test.m4a", num_speakers=3)
 
 print("\n========== DIARIZED TRANSCRIPT ==========\n")
 print(result["transcript"])
