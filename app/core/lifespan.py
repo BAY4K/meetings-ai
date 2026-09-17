@@ -8,6 +8,8 @@ from app.asr.transcriber import Transcriber
 from app.llm.analyzer import Analyzer
 from app.services.meeting_pipeline import MeetingPipeline
 from app.docx_generator.generator import ProtocolDocxGenerator
+from app.services.job_runner import JobRunner
+from app.services.job_store import JobStore
 
 
 @asynccontextmanager
@@ -50,8 +52,18 @@ async def lifespan(app: FastAPI):
         docx_generator=docx_generator,
     )
 
+    #Хранилище всех состояний
+    job_store = JobStore()
+    # Объект, который запускает pipeline и обновляет JobStore.
+    job_runner = JobRunner(
+        pipeline=pipeline,
+        job_store=job_store,
+    )
+
     app.state.pipeline = pipeline
     app.state.docx_generator = docx_generator
+    app.state.job_store = job_store
+    app.state.job_runner = job_runner
 
     print("Meeting pipeline ready.")
 
@@ -59,4 +71,5 @@ async def lifespan(app: FastAPI):
 
     app.state.pipeline = None
     app.state.docx_generator = None
-
+    app.state.job_store = None
+    app.state.job_runner = None
