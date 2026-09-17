@@ -1,33 +1,59 @@
 import gc
 import os
-from pathlib import Path
-from typing import overload
 
+from copy import deepcopy
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import torch
-from pyannote.audio import Pipeline
 import whisperx
+
+from pyannote.audio import Pipeline
 
 
 class Transcriber:
+    SAMPLE_RATE = 16_000
+
+    DEFAULT_MIN_SPEAKERS = 2
+    DEFAULT_MAX_SPEAKERS = 4
+
+    # Только диагностический порог.
+    # Сам по себе speaker с margin < 0.35
+    # ещё не исправляется.
+    SPEAKER_UNCERTAIN_MARGIN = 0.35
+
+    # Более строгий порог именно
+    # для автоматического boundary repair.
+    BOUNDARY_REPAIR_MARGIN = 0.25
+
+
     def __init__(
             self,
             model_name: str = 'large-v3',
             device: str = 'cuda',
             diarization_device: str = 'cuda',
             diarization_model: str = (
-                "pyannote/speaker-diarization-community-1"
+                'pyannote/'
+                'speaker-diarization-community-1'
             ),
             compute_type: str = 'float16',
             batch_size: int = 1,
             language: str = 'ru',
             vad_onset: float = 0.35,
             vad_offset: float = 0.25,
-            ):
+    ):
         self.model_name = model_name
         self.device = device
-        self.diarization_device = diarization_device
-        self.diarization_model = diarization_model
+
+        self.diarization_device = (
+            diarization_device
+        )
+
+        self.diarization_model = (
+            diarization_model
+        )
+
         self.compute_type = compute_type
         self.batch_size = batch_size
         self.language = language
@@ -39,17 +65,18 @@ class Transcriber:
 
         print('Loading diarization model...')
 
-        #Запуск модели для диаризации
-        self.diarize_model = Pipeline.from_pretrained(
-            self.diarization_model,
-            token=hf_token,
+        # Сам pipeline создаём один раз.
+        # На CUDA он будет переноситься
+        # непосредственно перед diarization.
+        self.diarize_model = (
+            Pipeline.from_pretrained(
+                self.diarization_model,
+                token=hf_token,
+            )
         )
 
-        self.diarize_model.to(
-            torch.device(diarization_device)
-        )
+        print('ASR pipeline ready.')
 
-        print('ASR pipeline ready...')
 
     def transcribe(
             self,
@@ -61,8 +88,18 @@ class Transcriber:
     ) -> dict:
         audio_path = str(audio_path)
 
-        # Загружаем аудио
-        audio = whisperx.load_audio(audio_path)
+        if (
+            num_speakers is not None
+            and num_speakers < 1
+        ):
+            raise ValueError(
+                'num_speakers must be >= 1'
+            )
+
+        # Декодируем аудио один раз.
+        audio = whisperx.load_audio(
+            audio_path
+        )
 
         asr_options = {
             'beam_size': 5,
@@ -81,29 +118,34 @@ class Transcriber:
             language=self.language,
             asr_options=asr_options,
             vad_options={
-                'vad_onset': self.vad_onset,
-                'vad_offset': self.vad_offset,
+                'vad_onset':
+                    self.vad_onset,
+                'vad_offset':
+                    self.vad_offset,
                 'chunk_size': 30,
             },
         )
 
         try:
-            # Распознаём речь
             result = model.transcribe(
                 audio,
-                batch_size = self.batch_size,
+                batch_size=self.batch_size,
             )
 
-            raw_segments = result['segments']
+            raw_segments = deepcopy(
+                result['segments']
+            )
+
         finally:
             del model
             self._clear_cuda()
 
         print('WhisperX model released.')
 
+        # Запускаем выравнивание
+
         print('Loading alignment model...')
 
-        # Запускаем модель выравнивания
         align_model, align_metadata = (
             whisperx.load_align_model(
                 language_code=self.language,
@@ -118,8 +160,9 @@ class Transcriber:
                 align_metadata,
                 audio,
                 self.device,
-                return_char_alignments = False,
+                return_char_alignments=False,
             )
+
         finally:
             del align_model
             del align_metadata
@@ -128,7 +171,7 @@ class Transcriber:
 
         print('Alignment model released.')
 
-        # Разбиваем на спикеров
+        # Запуск диаризации
 
         diarize_segments = (
             self._run_diarization(
@@ -137,42 +180,76 @@ class Transcriber:
             )
         )
 
-        # Сопоставляем спикеров со словами
+
+        # Соотносим слова к спикерам
+
         result_with_speakers = (
             whisperx.assign_word_speakers(
                 diarize_segments,
                 aligned_result,
-                fill_nearest=True
+
+                # В наших тестах это
+                # хорошо убрало UNKNOWN.
+                fill_nearest=True,
             )
         )
 
-
+        # Проверка на подозрительные участки
 
         self._add_speaker_overlap_info(
-            result_with_speakers['segments'],
-            diarize_segments
+            result_with_speakers[
+                'segments'
+            ],
+            diarize_segments,
         )
+
+        # Исправление подозрительных участков
 
         self._repair_leading_boundary_words(
-            result_with_speakers['segments'],
+            result_with_speakers[
+                'segments'
+            ]
         )
 
-        # Конвертация формата whisperx к нужному нам формату
+        # Создаём очередь как при диалоге
+
         speaker_turns = (
-            self._build_speakers_turn(
-                result_with_speakers['segments']
+            self._build_speaker_turns(
+                result_with_speakers[
+                    'segments'
+                ]
             )
         )
 
-        transcript = self._build_transcript(speaker_turns)
+        transcript = self._build_transcript(
+            speaker_turns
+        )
+
+        # Записываем результат
 
         response = {
-            "language" : result['language'],
-            "transcript" : transcript,
-            'speaker_turns' : speaker_turns,
-            'raw_segments': raw_segments,
-            'segments' : (result_with_speakers['segments']),
+            'language': result['language'],
+            'transcript': transcript,
+
+            'speaker_turns':
+                speaker_turns,
+
+            # Полезно для диагностики:
+            # что услышал Whisper до
+            # alignment + diarization.
+            'raw_segments':
+                raw_segments,
+
+            # Здесь уже word timestamps,
+            # speaker, margin и информация
+            # об automatic repair.
+            'segments':
+                result_with_speakers[
+                    'segments'
+                ],
         }
+
+        # Оптимизация и очистка
 
         del audio
         del aligned_result
@@ -184,37 +261,174 @@ class Transcriber:
 
         return response
 
-    @staticmethod
-    def _clear_cuda():
-        gc.collect()
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    def _run_diarization(
+            self,
+            audio: np.ndarray,
+            *,
+            num_speakers: int | None = None,
+    ) -> pd.DataFrame:
+        """
+        Запускает pyannote Community-1.
+
+        Если точное число участников известно,
+        используем num_speakers.
+
+        Иначе используем auto-режим 2..4.
+        """
+
+        audio_data = {
+            'waveform': torch.from_numpy(
+                audio[None, :]
+            ),
+            'sample_rate':
+                self.SAMPLE_RATE,
+        }
+
+        target_device = torch.device(
+            self.diarization_device
+        )
+
+        # Модель хранится между запросами,
+        # но на GPU переносится только
+        # непосредственно перед diarization.
+        self.diarize_model.to(
+            target_device
+        )
+
+        try:
+            if num_speakers is not None:
+                output = self.diarize_model(
+                    audio_data,
+                    num_speakers=num_speakers,
+                )
+
+            else:
+                output = self.diarize_model(
+                    audio_data,
+                    min_speakers=(
+                        self.DEFAULT_MIN_SPEAKERS
+                    ),
+                    max_speakers=(
+                        self.DEFAULT_MAX_SPEAKERS
+                    ),
+                )
+
+            # Community-1 имеет специальный
+            # exclusive-вариант, удобный
+            # для объединения с ASR timestamps.
+            diarization = (
+                output
+                .exclusive_speaker_diarization
+            )
+
+            dataframe = (
+                self._diarization_to_dataframe(
+                    diarization
+                )
+            )
+
+            del diarization
+            del output
+
+            return dataframe
+
+        finally:
+            # Сразу после transcribe запускается Qwen,
+            # поэтому не оставляем pyannote
+            # занимать VRAM.
+            if target_device.type == 'cuda':
+                self.diarize_model.to(
+                    torch.device('cpu')
+                )
+
+                self._clear_cuda()
+
 
     @staticmethod
+    def _diarization_to_dataframe(
+            diarization,
+    ) -> pd.DataFrame:
+        rows = []
+
+        for (
+            segment,
+            _,
+            speaker,
+        ) in diarization.itertracks(
+            yield_label=True
+        ):
+            rows.append({
+                'segment':
+                    segment,
+
+                'speaker':
+                    speaker,
+
+                'start':
+                    segment.start,
+
+                'end':
+                    segment.end,
+            })
+
+        return pd.DataFrame(rows)
+
+
+    @classmethod
     def _add_speaker_overlap_info(
+            cls,
             segments: list[dict],
-            diarization
-    ):
+            diarization: pd.DataFrame,
+    ) -> None:
+        """
+        Для каждого слова считаем,
+        насколько уверенно его timestamp
+        относится к выбранному speaker.
+
+        Это диагностика, а не самостоятельное
+        исправление speaker.
+        """
+
         for segment in segments:
-            for word in segment.get('words', []):
+            for word in segment.get(
+                    'words',
+                    []
+            ):
                 start = word.get('start')
                 end = word.get('end')
 
-                if start is None or end is None:
+                if (
+                    start is None
+                    or end is None
+                ):
                     continue
 
-                word_duration = end - start
+                word_duration = (
+                    end - start
+                )
 
                 if word_duration <= 0:
                     continue
 
-                overlaps = {}
+                overlaps: dict[
+                    str,
+                    float
+                ] = {}
 
-                for _, row in diarization.iterrows():
+                for _, row in (
+                    diarization.iterrows()
+                ):
                     intersection = (
-                        min(end, row['end'])
-                        - max(start, row['start'])
+                        min(
+                            end,
+                            row['end']
+                        )
+                        -
+                        max(
+                            start,
+                            row['start']
+                        )
                     )
 
                     if intersection <= 0:
@@ -223,7 +437,12 @@ class Transcriber:
                     speaker = row['speaker']
 
                     overlaps[speaker] = (
-                        overlaps.get(speaker, 0) + intersection
+                        overlaps.get(
+                            speaker,
+                            0.0
+                        )
+                        +
+                        intersection
                     )
 
                 ranked = sorted(
@@ -233,279 +452,338 @@ class Transcriber:
                 )
 
                 if not ranked:
-                    word['speaker_uncertain'] = True
+                    # fill_nearest мог назначить
+                    # speaker, даже если прямого
+                    # overlap не было.
+                    word[
+                        'speaker_uncertain'
+                    ] = True
+
                     continue
 
-                best_speaker, best_overlap = ranked[0]
+                (
+                    best_speaker,
+                    best_overlap,
+                ) = ranked[0]
 
                 second_overlap = (
                     ranked[1][1]
                     if len(ranked) > 1
-                    else 0
+                    else 0.0
                 )
 
                 best_share = (
-                    best_overlap / word_duration
+                    best_overlap
+                    / word_duration
                 )
 
                 second_share = (
-                    second_overlap / word_duration
+                    second_overlap
+                    / word_duration
                 )
 
-                word['speaker_overlap'] = (
-                    round(best_share, 3)
+                margin = (
+                    best_share
+                    - second_share
                 )
 
-                word['speaker_margin'] = round(
-                    best_share-second_share,
-                    3
+                word[
+                    'speaker_best_overlap'
+                ] = best_speaker
+
+                word[
+                    'speaker_overlap'
+                ] = round(
+                    best_share,
+                    3,
                 )
 
-                word['speaker_uncertain'] = (
+                word[
+                    'speaker_margin'
+                ] = round(
+                    margin,
+                    3,
+                )
+
+                word[
+                    'speaker_uncertain'
+                ] = (
                     second_share > 0
-                    and (
-                        best_share
-                        - second_share
-                    ) < 0.35
+                    and margin
+                    < cls.SPEAKER_UNCERTAIN_MARGIN
                 )
 
-    @staticmethod
-    def _repair_speaker_boundaries(
-            segments: list[dict],
-    ):
-        words = []
 
-        for segment in segments:
-            words.extend(
-                segment.get('words', [])
-            )
-        for index in range(1, len(words) - 1):
-            word = words[index]
-
-            if not word.get('speaker_uncertain', False):
-                continue
-
-            previous = words[index - 1]
-            following = words[index + 1]
-
-            current_speaker = word.get('speaker')
-            previous_speaker = previous.get('speaker')
-            following_speaker = following.get('speaker')
-
-            if(
-                previous_speaker
-                and previous_speaker
-                == following_speaker
-                and current_speaker
-                != previous_speaker
-            ):
-                word['speaker'] = (
-                    previous_speaker
-                )
-
-    @staticmethod
-    def _repair_sentence_end_boundaries(
-            segments: list[dict],
-    ):
-        words = []
-        for segment in segments:
-            words.extend(
-                segment.get('words', [])
-            )
-
-        for index in range(1, len(words) - 1):
-            word = words[index]
-            previous = words[index - 1]
-
-            if not word.get('speaker_uncertain', False):
-                continue
-
-            text = word.get('word', '').strip()
-
-            if not text.endswith(('.','!','?')):
-                continue
-
-            current_speaker = word.get('speaker')
-            previous_speaker = previous.get('speaker')
-
-            if(
-                not previous_speaker
-                or previous_speaker
-                == current_speaker
-            ):
-                continue
-
-            previous_text = previous.get('word', '').strip()
-
-            if previous_text.endswith(('.','!','?')):
-                continue
-
-            word['speaker'] = (
-                previous_speaker
-            )
-
+    @classmethod
     def _repair_leading_boundary_words(
-            self,
+            cls,
             segments: list[dict],
-            margin_threshold: float = 0.25,
     ) -> None:
+        """
+        Исправляет только очень узкий
+        тип недочёта, когда текст утекает другому спикеру.
+
+        Перенос возможен только если:
+        - speaker сменился;
+        - слово имеет низкий margin;
+        - оно завершает предложение;
+        - предыдущее слово предложение
+          не завершало;
+        - следующее слово остаётся
+          у нового speaker.
+        """
+
         words = []
 
         for segment in segments:
-            for word in segment.get('words', []):
-                words.append(word)
+            words.extend(
+                segment.get(
+                    'words',
+                    []
+                )
+            )
 
-        for index in range(1, len(words) - 1):
+        for index in range(
+                1,
+                len(words) - 1,
+        ):
+            previous = words[
+                index - 1
+            ]
+
             word = words[index]
-            previous = words[index - 1]
-            following = words[index + 1]
 
-            current_speaker = word.get('speaker')
-            previous_speaker = previous.get('speaker')
-            following_speaker = following.get('speaker')
+            following = words[
+                index + 1
+            ]
+
+            current_speaker = (
+                word.get('speaker')
+            )
+
+            previous_speaker = (
+                previous.get('speaker')
+            )
+
+            following_speaker = (
+                following.get('speaker')
+            )
 
             if (
-                    not current_speaker
-                    or not previous_speaker
-                    or current_speaker == previous_speaker
+                not current_speaker
+                or not previous_speaker
             ):
                 continue
 
-            margin = word.get('speaker_margin')
-
+            # Никакой смены speaker нет.
             if (
-                    margin is None
-                    or margin >= margin_threshold
+                current_speaker
+                == previous_speaker
             ):
                 continue
 
-            text = word.get('word', '').strip()
-            previous_text = previous.get('word', '').strip()
+            margin = word.get(
+                'speaker_margin'
+            )
 
-            # Нас интересует слово,
-            # которое завершает предыдущую фразу.
-            if not text.endswith(('.', '!', '?')):
+            if (
+                margin is None
+                or margin
+                >= cls.BOUNDARY_REPAIR_MARGIN
+            ):
                 continue
 
-            # Предыдущая фраза уже закончилась —
-            # значит переносить ничего не надо.
-            if previous_text.endswith(('.', '!', '?')):
+            text = (
+                word.get(
+                    'word',
+                    ''
+                )
+                .strip()
+            )
+
+            previous_text = (
+                previous.get(
+                    'word',
+                    ''
+                )
+                .strip()
+            )
+
+            # Текущее слово должно заканчивать предложение.
+            if not text.endswith(
+                ('.', '!', '?')
+            ):
                 continue
 
-            # Следующее слово должно принадлежать
-            # текущему speaker. Это означает,
-            # что мы переносим только первое
-            # пограничное слово, а не всю реплику.
-            if following_speaker != current_speaker:
+            # Если предыдущее слово уже завершило предложение, то продолжения предыдущей реплики нет.
+            if previous_text.endswith(
+                ('.', '!', '?')
+            ):
                 continue
 
-            word['speaker'] = previous_speaker
-            word['speaker_repaired'] = True
+            # После сомнительного слова новый speaker должен продолжать свою реплику.
+            if (
+                following_speaker
+                != current_speaker
+            ):
+                continue
 
-    #Метод для распределения слов по ролям(разбивание реплик)
+            # Для аудита сохраняем, что именно изменила наша эвристика.
+            word[
+                'speaker_original'
+            ] = current_speaker
+
+            word[
+                'speaker'
+            ] = previous_speaker
+
+            word[
+                'speaker_repaired'
+            ] = True
+
+            word[
+                'speaker_repair_reason'
+            ] = (
+                'leading_boundary_word'
+            )
+
+
     @staticmethod
-    def _build_speakers_turn(segments: list[dict]) -> list[dict]:
+    def _build_speaker_turns(
+            segments: list[dict],
+    ) -> list[dict]:
+        """
+        Группирует последовательные слова
+        одного speaker в цельные реплики.
+        """
+
         turns = []
 
         current_speaker = None
         current_words = []
+
         start_time = None
         end_time = None
 
         for segment in segments:
-            for word in segment.get('words', []):
-                text = word.get('word', '').strip()
+            for word in segment.get(
+                    'words',
+                    []
+            ):
+                text = (
+                    word.get(
+                        'word',
+                        ''
+                    )
+                    .strip()
+                )
 
                 if not text:
                     continue
 
-                speaker = word.get('speaker', 'UNKNOWN')
+                speaker = word.get(
+                    'speaker',
+                    'UNKNOWN',
+                )
 
-                if speaker != current_speaker:
+                if (
+                    speaker
+                    != current_speaker
+                ):
                     if current_words:
                         turns.append({
-                            'speaker' : current_speaker,
-                            'start' : start_time,
-                            'end' : end_time,
-                            'text': " ".join(current_words),
+                            'speaker':
+                                current_speaker,
+
+                            'start':
+                                start_time,
+
+                            'end':
+                                end_time,
+
+                            'text':
+                                ' '.join(
+                                    current_words
+                                ),
                         })
 
-                    current_speaker = speaker
-                    current_words = []
-                    start_time = word.get('start')
+                    current_speaker = (
+                        speaker
+                    )
 
-                current_words.append(text)
-                end_time = word.get('end')
+                    current_words = []
+
+                    start_time = (
+                        word.get('start')
+                    )
+
+                current_words.append(
+                    text
+                )
+
+                word_end = word.get(
+                    'end'
+                )
+
+                if word_end is not None:
+                    end_time = word_end
 
         if current_words:
             turns.append({
-                'speaker' : current_speaker,
-                'start' : start_time,
-                'end' : end_time,
-                'text': " ".join(current_words),
+                'speaker':
+                    current_speaker,
+
+                'start':
+                    start_time,
+
+                'end':
+                    end_time,
+
+                'text':
+                    ' '.join(
+                        current_words
+                    ),
             })
 
         return turns
 
-    def _run_diarization(
-            self,
-            audio: str,
-            *,
-            num_speakers: int | None = None,
-    ):
-        audio_data = {
-            'waveform': torch.from_numpy(
-                audio[None, :],
-            ),
-            'sample_rate': 16000,
-        }
-
-        if num_speakers is not None:
-            output = self.diarize_model(
-                audio_data,
-                num_speakers=num_speakers,
-            )
-        else:
-            output = self.diarize_model(
-                audio_data,
-                min_speakers=2,
-                max_speakers=4,
-            )
-
-        diarization = (output.exclusive_speaker_diarization)
-
-        return self._diarization_to_dataframe(diarization)
 
     @staticmethod
-    def _diarization_to_dataframe(diarization) -> pd.DataFrame:
-        rows = []
+    def _build_transcript(
+            turns: list[dict],
+    ) -> str:
+        """
+        Компактный transcript,
+        который затем получает Qwen.
+        """
 
-        for segment, _, speaker in (
-                diarization.itertracks(
-                    yield_label=True
-                )
-        ):
-            rows.append({
-                'segment' : segment,
-                'speaker' : speaker,
-                'start' : segment.start,
-                'end' : segment.end,
-            })
-
-        return pd.DataFrame(rows)
-
-    # Метод для составления удобной структуры диалога для Qwen
-    @staticmethod
-    def _build_transcript(turns: list[dict]) -> str:
         lines = []
 
         for turn in turns:
-            start = turn["start"] or 0
-            speaker = turn["speaker"]
-            text = turn["text"]
-
-            lines.append(
-                f"[{start:2f}] {speaker}: {text}"
+            start = (
+                turn['start']
+                or 0.0
             )
 
-        return "\n".join(lines)
+            speaker = (
+                turn['speaker']
+                or 'UNKNOWN'
+            )
+
+            text = turn['text']
+
+            lines.append(
+                f'[{start:.2f}] '
+                f'{speaker}: '
+                f'{text}'
+            )
+
+        return '\n'.join(lines)
+
+
+    @staticmethod
+    def _clear_cuda() -> None:
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
