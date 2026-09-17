@@ -13,8 +13,8 @@ class ResolutionItem(BaseModel):
     responsible_speaker: str | None = None
     # На какой срок
     deadline: str | None = None
-    # Дословный транскрипт свидетельствующий об этом
-    evidence: list[str] = Field(default_factory=list)
+
+
 
 class HeardBlock(BaseModel):
     model_config = ConfigDict(extra='forbid')

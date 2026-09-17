@@ -168,16 +168,6 @@ function createProtocolBlock(block) {
 
     container.appendChild(speaker);
 
-
-    const heardLabel =
-        document.createElement("div");
-
-    heardLabel.className = "protocol-label";
-    heardLabel.textContent = "Заслушали:";
-
-    container.appendChild(heardLabel);
-
-
     const summary =
         document.createElement("p");
 
