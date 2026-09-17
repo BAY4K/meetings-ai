@@ -3,6 +3,9 @@ from pathlib import Path
 from app.asr.transcriber import Transcriber
 from app.llm.analyzer import Analyzer
 from app.docx_generator.generator import ProtocolDocxGenerator
+from app.schemas import guard
+from app.services.semantic_guard import SemanticGuard
+from tests.llm_gauntlet import transcript
 
 
 class MeetingPipeline:
@@ -13,10 +16,13 @@ class MeetingPipeline:
             transcriber: Transcriber,
             analyzer: Analyzer,
             docx_generator: ProtocolDocxGenerator,
+            semantic_guard: SemanticGuard | None = None,
     ):
         self.transcriber = transcriber
         self.analyzer = analyzer
         self.docx_generator = docx_generator
+
+        self.semantic_guard = semantic_guard or SemanticGuard()
 
 
     def process(
@@ -26,10 +32,14 @@ class MeetingPipeline:
     ) -> dict:
         # Сначала переводим из аудио в текст
         asr_result = self.transcriber.transcribe(audio_path)
+        transcription = asr_result['transcript']
 
         # Затем обобщаем через Qwen
-        extraction = self.analyzer.analyze(
-            asr_result['transcript'],
+        extraction = self.analyzer.analyze(transcription)
+
+        guard_report =self.semantic_guard.validate(
+            transcript=transcription,
+            extraction=extraction,
         )
 
         docx_path = self.docx_generator.generate(
@@ -40,8 +50,9 @@ class MeetingPipeline:
         # Собираем результат
         return {
             'language': asr_result['language'],
-            'transcript': asr_result['transcript'],
+            'transcript': transcription,
             'speaker_turns': asr_result['speaker_turns'],
             'extraction': extraction,
+            'guard': guard_report.model_dump(),
             'docx_path': docx_path,
         }

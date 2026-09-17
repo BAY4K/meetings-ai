@@ -1,4 +1,6 @@
 from app.llm.analyzer import Analyzer
+from app.schemas import guard
+from app.services.semantic_guard import SemanticGuard
 
 
 analyzer = Analyzer()
@@ -114,6 +116,12 @@ transcript = """
 
 result = analyzer.analyze(transcript)
 
+guardian = SemanticGuard()
+
+guard_report = guardian.validate(
+    transcript=transcript,
+    extraction=result
+)
 
 print()
 print("=" * 80)
@@ -122,6 +130,17 @@ print("=" * 80)
 
 print(
     result.model_dump_json(
+        indent=2
+    )
+)
+
+print()
+print("=" * 80)
+print("SEMANTIC GUARD")
+print("=" * 80)
+
+print(
+    guard_report.model_dump_json(
         indent=2
     )
 )
