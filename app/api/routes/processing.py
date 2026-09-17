@@ -1,9 +1,16 @@
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
+
 import aiofiles
 
 from fastapi import (
-    APIRouter, UploadFile, File, HTTPException, Request
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
 )
 from starlette.concurrency import run_in_threadpool
 
@@ -45,7 +52,16 @@ async def _save_audio_file(file: UploadFile) -> tuple[str, Path]:
 async def process(
         request: Request,
         file: UploadFile = File(),
+        num_speakers: int | None = Form(default=None),
 ):
+    if(
+        num_speakers is not None
+        and num_speakers not in {2,3,4}
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail='Количество участников должно быть: Авто, 2, 3 или 4.'
+        )
     original_name, file_path = (await _save_audio_file(file))
 
     file_id = uuid4().hex
@@ -55,11 +71,14 @@ async def process(
             / f'{file_id}.docx'
     )
 
-    result = await run_in_threadpool(
+    pipeline_call = partial(
         request.app.state.pipeline.process,
         file_path,
-        output_path
+        output_path,
+        num_speakers=num_speakers,
     )
+
+    result = await run_in_threadpool(pipeline_call)
 
     return {
         'filename': original_name,
@@ -67,5 +86,6 @@ async def process(
         'transcript': result['transcript'],
         'speaker_turns': result['speaker_turns'],
         'extraction': result['extraction'].model_dump(),
+        'guard': result['guard'],
         'download_url': f'/download/{file_id}',
     }

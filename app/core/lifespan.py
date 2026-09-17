@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
+from app.core.settings import settings
 from app.asr.transcriber import Transcriber
 from app.llm.analyzer import Analyzer
 from app.services.meeting_pipeline import MeetingPipeline
@@ -16,11 +17,30 @@ async def lifespan(app: FastAPI):
 
     print('Loading ASR model...')
 
-    transcriber = Transcriber()
+    transcriber = Transcriber(
+        model_name=settings.asr.model_name,
+        device=settings.asr.device,
+        diarization_device=(
+            settings.asr.diarization_device
+        ),
+        diarization_model=(
+            settings.asr.diarization_model
+        ),
+        compute_type=settings.asr.compute_type,
+        batch_size=settings.asr.batch_size,
+        language=settings.asr.language,
+        vad_onset=settings.asr.vad_onset,
+        vad_offset=settings.asr.vad_offset,
+    )
 
     print('ASR ready.')
 
-    analyzer = Analyzer()
+    analyzer = Analyzer(
+        model_name=settings.llm.model_name,
+        base_url=settings.llm.base_url,
+        timeout=settings.llm.timeout,
+        num_ctx=settings.llm.num_ctx,
+    )
 
     docx_generator = ProtocolDocxGenerator()
 

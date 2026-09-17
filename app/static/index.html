@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
@@ -19,7 +21,10 @@
 
 <header class="page-header">
     <div class="container">
-        <h1>Meeting AI</h1>
+        <h1>
+            Meeting AI
+        </h1>
+
         <p>
             Локальная расшифровка аудио
             и создание протокола совещания
@@ -27,12 +32,17 @@
     </div>
 </header>
 
+
 <main class="container">
 
     <section class="card">
-        <h2>Аудиозапись</h2>
+        <h2>
+            Аудиозапись
+        </h2>
+
 
         <div class="upload-area">
+
             <label for="audioFile">
                 Выберите запись совещания
             </label>
@@ -46,7 +56,42 @@
                 type="file"
                 accept=".mp3,.wav,.m4a"
             >
+
         </div>
+
+        <div class="field">
+
+            <label for="speakerCount">
+                Количество участников
+            </label>
+
+            <select id="speakerCount">
+
+                <option value="">
+                    Автоматически
+                </option>
+
+                <option value="2">
+                    2 участника
+                </option>
+
+                <option value="3">
+                    3 участника
+                </option>
+
+                <option value="4">
+                    4 участника
+                </option>
+
+            </select>
+
+            <p class="muted">
+                Если точное количество участников
+                известно, лучше указать его.
+            </p>
+
+        </div>
+
 
         <button
             id="processButton"
@@ -54,6 +99,7 @@
         >
             Обработать запись
         </button>
+
     </section>
 
 
@@ -62,12 +108,16 @@
         class="card hidden"
         aria-live="polite"
     >
-        <h2>Состояние</h2>
+
+        <h2>
+            Состояние
+        </h2>
 
         <div
             id="statusText"
             class="status"
         ></div>
+
     </section>
 
 
@@ -77,17 +127,26 @@
     >
 
         <section class="card">
+
             <div class="card-header">
+
                 <div>
-                    <h2>Протокол</h2>
+
+                    <h2>
+                        Протокол
+                    </h2>
 
                     <p class="muted">
                         Результат анализа встречи
                     </p>
+
                 </div>
+
             </div>
 
+
             <div id="protocolBlocks"></div>
+
         </section>
 
 
@@ -95,24 +154,33 @@
             id="warningsCard"
             class="card hidden"
         >
-            <h2>Требует внимания</h2>
+
+            <h2>
+                Требует внимания
+            </h2>
 
             <div id="warnings"></div>
+
         </section>
 
 
         <section class="card">
+
             <details>
+
                 <summary>
                     Расшифровка
                 </summary>
 
                 <pre id="transcript"></pre>
+
             </details>
+
         </section>
 
 
         <section class="card actions">
+
             <a
                 id="downloadButton"
                 class="button hidden"
@@ -120,11 +188,13 @@
             >
                 Скачать DOCX
             </a>
+
         </section>
 
     </div>
 
 </main>
+
 
 <script
     src="/static/js/app.js"
@@ -132,4 +202,5 @@
 ></script>
 
 </body>
+
 </html>
