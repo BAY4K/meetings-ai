@@ -22,7 +22,7 @@ class LlmSettings:
     base_url: str = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
 
     timeout: float = 300.0
-    num_ctx: int = 8192
+    num_ctx: int = 16384
 
 
 @dataclass(frozen=True)
