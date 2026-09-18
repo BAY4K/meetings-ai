@@ -84,17 +84,41 @@ async def process(
         num_speakers=num_speakers,
     )
 
-    result = await run_in_threadpool(pipeline_call)
+    try:
+        result = await run_in_threadpool(
+            pipeline_call
+        )
 
-    return {
-        'filename': original_name,
-        'language': result['language'],
-        'transcript': result['transcript'],
-        'speaker_turns': result['speaker_turns'],
-        'extraction': result['extraction'].model_dump(),
-        'guard': result['guard'],
-        'download_url': f'/download/{file_id}',
-    }
+        return {
+            'filename':
+                original_name,
+
+            'language':
+                result['language'],
+
+            'transcript':
+                result['transcript'],
+
+            'speaker_turns':
+                result['speaker_turns'],
+
+            'extraction':
+                result[
+                    'extraction'
+                ].model_dump(),
+
+            'guard':
+                result['guard'],
+
+            'download_url':
+                f'/download/{file_id}',
+        }
+
+    finally:
+        # Cleanup legacy endpoint.
+        file_path.unlink(
+            missing_ok=True
+        )
 
 @router.post('/process/jobs', status_code=202)
 async def create_processing_job(

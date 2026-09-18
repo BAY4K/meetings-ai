@@ -118,11 +118,10 @@ class JobStore:
 
             job.status = 'failed'
             job.stage = 'failed'
-            job.message = (
-                'Не удалось обработать запись.'
-            )
 
+            job.message = error
             job.error = error
+
             job.updated_at = utc_now()
 
     def _get_required(

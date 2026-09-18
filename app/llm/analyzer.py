@@ -116,8 +116,6 @@ class Analyzer:
 
         data = response.json()
 
-        self._print_metrics(data)
-
         content = (
             data['message']['content']
         )
@@ -127,44 +125,4 @@ class Analyzer:
             .model_validate_json(
                 content
             )
-        )
-
-
-    @staticmethod
-    def _print_metrics(
-            data: dict,
-    ) -> None:
-        print(
-            'Qwen prompt tokens:',
-            data.get(
-                'prompt_eval_count'
-            ),
-        )
-
-        print(
-            'Qwen output tokens:',
-            data.get(
-                'eval_count'
-            ),
-        )
-
-        print(
-            'Qwen load duration:',
-            data.get(
-                'load_duration'
-            ),
-        )
-
-        print(
-            'Qwen prompt eval duration:',
-            data.get(
-                'prompt_eval_duration'
-            ),
-        )
-
-        print(
-            'Qwen generation duration:',
-            data.get(
-                'eval_duration'
-            ),
         )
