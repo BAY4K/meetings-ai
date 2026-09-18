@@ -87,7 +87,7 @@ FastAPI и Ollama запускаются отдельными Docker Compose с�
 - Hugging Face token для первоначального получения модели Pyannote;
 - свободное место на диске для Docker images и AI-моделей.
 
-Проверить доступ GPU из Docker можно командой:
+Проверить доступ GPU из Docker можно командой(НЕ ОБЯЗАТЕЛЬНО):
 
 ```bash
 docker run --rm --gpus all pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime nvidia-smi
