@@ -288,35 +288,6 @@ outputs/
 
 При Docker-запуске эта директория подключена к контейнеру через bind mount, поэтому DOCX остаётся доступен на host-системе.
 
-## Основные API endpoints
-
-Создание background job:
-
-```http
-POST /process/jobs
-```
-
-Получение текущего состояния:
-
-```http
-GET /process/jobs/{job_id}
-```
-
-Скачивание готового DOCX:
-
-```http
-GET /download/{file_id}
-```
-
-Состояния обработки:
-
-```text
-queued
-running
-completed
-failed
-```
-
 ## Структура проекта
 
 ```text
