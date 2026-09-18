@@ -112,9 +112,10 @@ select {
 }
 
 
-.field select {
+.field select,
+.field input {
     width: 100%;
-    max-width: 320px;
+    max-width: 520px;
 
     padding: 10px 12px;
 
@@ -301,7 +302,8 @@ pre {
     }
 
 
-    .field select {
+    .field select,
+    .field input {
         max-width: none;
     }
 
@@ -312,3 +314,4 @@ pre {
         gap: 5px;
     }
 }
+

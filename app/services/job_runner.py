@@ -31,6 +31,7 @@ class JobRunner:
             audio_path: Path,
             output_path: Path,
             num_speakers: int | None,
+            hotwords: str | None = None,
     ) -> None:
 
         self.job_store.mark_running(
@@ -58,6 +59,7 @@ class JobRunner:
                 audio_path,
                 output_path,
                 num_speakers=num_speakers,
+                hotwords=hotwords,
                 on_stage=on_stage,
             )
 

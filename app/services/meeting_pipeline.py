@@ -36,6 +36,7 @@ class MeetingPipeline:
             output_path: Path,
             *,
             num_speakers: int | None = None,
+            hotwords: str | None = None,
             on_stage: StageCallback | None = None,
     ) -> dict:
 
@@ -43,6 +44,7 @@ class MeetingPipeline:
         asr_result = self.transcriber.transcribe(
             audio_path,
             num_speakers=num_speakers,
+            hotwords=hotwords,
             on_stage=on_stage
         )
 

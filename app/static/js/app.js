@@ -7,6 +7,10 @@ const elements = {
         "speakerCount"
     ),
 
+    hotwords: document.getElementById(
+        "hotwords"
+    ),
+
     processButton: document.getElementById(
         "processButton"
     ),
@@ -95,6 +99,15 @@ async function processMeeting() {
         );
     }
 
+    const hotwords =
+    elements.hotwords.value.trim();
+
+    if (hotwords) {
+        formData.append(
+            "hotwords",
+            hotwords
+        );
+    }
 
     try {
         const response = await fetch(

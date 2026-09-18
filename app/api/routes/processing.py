@@ -61,11 +61,15 @@ def _validate_num_speakers(num_speakers: int | None) -> None:
             ),
         )
 
+# LEGACY
 @router.post("/process")
 async def process(
         request: Request,
         file: UploadFile = File(),
         num_speakers: int | None = Form(default=None),
+        hotwords: str | None = Form(
+            default=None
+        ),
 ):
     _validate_num_speakers(num_speakers)
     original_name, file_path = (await _save_audio_file(file))
@@ -82,6 +86,7 @@ async def process(
         file_path,
         output_path,
         num_speakers=num_speakers,
+        hotwords=hotwords,
     )
 
     try:
@@ -130,6 +135,9 @@ async def create_processing_job(
         num_speakers: int | None = Form(
             default=None
         ),
+        hotwords: str | None = Form(
+            default=None
+        ),
 ):
     _validate_num_speakers(num_speakers)
 
@@ -158,6 +166,12 @@ async def create_processing_job(
         )
     )
 
+    if hotwords is not None:
+        hotwords = hotwords.strip()
+
+        if not hotwords:
+            hotwords = None
+
     # BackgroundTasks запускает sync JobRunner после того,
     # как HTTP response уже отправлен.
     # То есть клиенту не надо ждать Whisper + Qwen несколько минут.
@@ -168,6 +182,7 @@ async def create_processing_job(
         audio_path=file_path,
         output_path=output_path,
         num_speakers=num_speakers,
+        hotwords=hotwords,
     )
 
     return {
