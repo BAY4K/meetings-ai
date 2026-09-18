@@ -38,14 +38,14 @@ class MeetingPipeline:
             num_speakers: int | None = None,
             on_stage: StageCallback | None = None,
     ) -> dict:
-        #Меняем статус
-        self._notify(
-            on_stage,
-            stage='transcribing',
-            message='Распознавание речи...'
-        )
+
         # Сначала переводим из аудио в текст
-        asr_result = self.transcriber.transcribe(audio_path, num_speakers=num_speakers)
+        asr_result = self.transcriber.transcribe(
+            audio_path,
+            num_speakers=num_speakers,
+            on_stage=on_stage
+        )
+
         transcription = asr_result['transcript']
 
 

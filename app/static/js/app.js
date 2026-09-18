@@ -86,9 +86,7 @@ async function processMeeting() {
 
 
     // Если выбран Auto, поле вообще не отправляем.
-    //
     // Тогда FastAPI получит: num_speakers = None
-    //
     // и Transcriber включит auto mode.
     if (speakerCount) {
         formData.append(
@@ -100,7 +98,7 @@ async function processMeeting() {
 
     try {
         const response = await fetch(
-            "/process",
+            "/process/jobs",
             {
                 method: "POST",
                 body: formData,
@@ -116,13 +114,14 @@ async function processMeeting() {
             );
         }
 
+        const job = await response.json();
 
-        const data =
-            await response.json();
+        showStatus(job.message || "Задача создана...")
+
+        const result = await waitForJob(job.status_url);
 
 
-        renderResult(data);
-
+        renderResult(result);
 
         showStatus(
             "Обработка завершена.",
@@ -144,6 +143,79 @@ async function processMeeting() {
     }
 }
 
+async function waitForJob(status_url) {
+    while (true) {
+        const response = await fetch(
+            status_url,
+            {
+                method: "GET",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                await getErrorMessage(
+                    response
+                )
+            );
+        }
+
+        const job =
+            await response.json();
+
+        // Показываем текущее сообщение backend.
+        if (job.message) {
+            showStatus(
+                job.message
+            );
+        }
+
+        // ВАЖНО:
+        // completed проверяем ДО проверки
+        // неизвестного статуса.
+
+        if (job.status === "completed") {
+            if (!job.result) {
+                throw new Error(
+                    "Задача завершена, "
+                    + "но сервер не вернул результат."
+                );
+            }
+
+            // Выходим из polling
+            // и возвращаем готовый результат
+            // обратно в processMeeting().
+            return job.result;
+        }
+
+
+        // Если backend сообщил об ошибке.
+        if (job.status === "failed") {
+            throw new Error(
+                job.error
+                || job.message
+                || "Обработка завершилась ошибкой."
+            );
+        }
+
+        if (
+            job.status !== "queued"
+            && job.status !== "running"
+        ) {
+            throw new Error(
+                `Неизвестный статус задачи: ${job.status}`
+            );
+        }
+
+
+        // Следующий запрос через 5 секунд.
+        await sleep(5000);
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function getErrorMessage(response) {
     try {

@@ -18,7 +18,8 @@ class ProcessingJob(BaseModel): # Состояние одной задачи о�
     job_id: str
     filename: str
     status: JobStatus = 'queued'
-    stage: str = 'Задача ожидает запуска.'
+    stage: str = 'queued'
+    message: str = 'Задача ожидает запуска.'
     result: dict[str, Any] | None = None
     error: str | None = None
 

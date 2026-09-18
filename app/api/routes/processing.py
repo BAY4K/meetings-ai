@@ -134,11 +134,9 @@ async def create_processing_job(
         )
     )
 
-    # BackgroundTasks запускает
-    # sync JobRunner после того,
+    # BackgroundTasks запускает sync JobRunner после того,
     # как HTTP response уже отправлен.
-    # То есть клиенту не надо ждать
-    # Whisper + Qwen несколько минут.
+    # То есть клиенту не надо ждать Whisper + Qwen несколько минут.
     background_tasks.add_task(
         request.app.state.job_runner.run,
         job_id=job_id,

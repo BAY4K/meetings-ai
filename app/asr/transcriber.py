@@ -3,6 +3,7 @@ import os
 
 from copy import deepcopy
 from pathlib import Path
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,11 @@ import whisperx
 
 from pyannote.audio import Pipeline
 
+
+StageCallback = Callable[
+    [str, str],
+    None,
+]
 
 class Transcriber:
     SAMPLE_RATE = 16_000
@@ -85,6 +91,7 @@ class Transcriber:
             num_speakers: int | None = None,
             hotwords: str | None = None,
             initial_prompt: str | None = None,
+            on_stage: StageCallback | None = None,
     ) -> dict:
         audio_path = str(audio_path)
 
@@ -109,7 +116,14 @@ class Transcriber:
             'suppress_numerals': False,
         }
 
+        self._notify_stage(
+            on_stage,
+            stage='transcribing',
+            message='Распознавание речи...',
+        )
+
         print('Loading WhisperX model...')
+
 
         model = whisperx.load_model(
             self.model_name,
@@ -137,12 +151,19 @@ class Transcriber:
             )
 
         finally:
+            # Освобождаем память
             del model
             self._clear_cuda()
 
         print('WhisperX model released.')
 
         # Запускаем выравнивание
+
+        self._notify_stage(
+            on_stage,
+            stage='aligning',
+            message='Выравнивание текста...',
+        )
 
         print('Loading alignment model...')
 
@@ -164,6 +185,7 @@ class Transcriber:
             )
 
         finally:
+            # Освобождаем память
             del align_model
             del align_metadata
 
@@ -172,6 +194,12 @@ class Transcriber:
         print('Alignment model released.')
 
         # Запуск диаризации
+
+        self._notify_stage(
+            on_stage,
+            stage='diarizing',
+            message='Определение участников...',
+        )
 
         diarize_segments = (
             self._run_diarization(
@@ -780,10 +808,29 @@ class Transcriber:
 
         return '\n'.join(lines)
 
-
     @staticmethod
     def _clear_cuda() -> None:
         gc.collect()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+    @staticmethod
+    def _notify_stage(
+            callback: StageCallback | None,
+            *,
+            stage: str,
+            message: str,
+    ) -> None:
+        """
+        Сообщает внешнему pipeline, какой ASR-этап сейчас выполняется.
+        Transcriber ничего не знает о FastAPI, JobStore или frontend.
+        """
+
+        if callback is None:
+            return
+
+        callback(
+            stage,
+            message,
+        )
