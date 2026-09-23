@@ -15,20 +15,41 @@ class ResolutionItem(BaseModel):
     deadline: str | None = None
 
 
-
-class HeardBlock(BaseModel):
+class ProtocolBlock(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     #Докладчик
     speaker_id: str
     speaker_name: str | None = None
-    summary: str
+    content: str
     resolutions: list[ResolutionItem] = Field(default_factory=list)
+
+
+class ManualReviewItem(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    timestamp: str
+    speaker_id: str
+    # Исходный сомнительный фрагмент.
+    fragment: str
+    # Тип проверки ограничиваем
+    # вариантами из промпта.
+    check_type: Literal[
+        'ФИО',
+        'число',
+        'дата',
+        'срок',
+        'подразделение',
+        'организация',
+        'оборудование',
+        'технический термин',
+        'неразборчивая речь',
+        'возможная ошибка диаризации',
+    ]
+
 
 class MeetingExtraction(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    heard: list[HeardBlock] = Field(default_factory=list)
-
-    unresolved_questions: list[str] = Field(default_factory=list)
-    ambiguous_fragments: list[str] = Field(default_factory=list)
+    protocol_blocks: list[ProtocolBlock] = Field(default_factory=list)
+    manual_review: list[ManualReviewItem] = Field(default_factory=list)

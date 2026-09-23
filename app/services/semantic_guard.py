@@ -25,7 +25,9 @@ class SemanticGuard:
             transcript: str,
             extraction: MeetingExtraction,
     ) -> GuardReport:
-        issues: list[GuardIssue] = []
+        issues: list[
+            GuardIssue
+        ] = []
 
         speakers = set(
             self.SPEAKER_PATTERN.findall(
@@ -33,34 +35,66 @@ class SemanticGuard:
             )
         )
 
+        # NEW:
+        # UNKNOWN тоже является допустимым
+        # техническим speaker ID,
+        # если он реально присутствует
+        # в transcript.
+        if re.search(
+            r'\bUNKNOWN\b',
+            transcript,
+        ):
+            speakers.add(
+                'UNKNOWN'
+            )
+
         normalized_transcript = (
             self._normalize_for_search(
                 transcript
             )
         )
 
-        for block_index, block in enumerate(
-            extraction.heard
+        # CHANGED:
+        # extraction.heard заменён
+        # на protocol_blocks.
+        for (
+            block_index,
+            block,
+        ) in enumerate(
+            extraction.protocol_blocks
         ):
             block_path = (
-                f'heard[{block_index}]'
+                f'protocol_blocks['
+                f'{block_index}]'
             )
 
             self._validate_speaker(
                 speaker=block.speaker_id,
                 speakers=speakers,
-                path=f'{block_path}.speaker_id',
+                path=(
+                    f'{block_path}.'
+                    'speaker_id'
+                ),
                 issues=issues,
             )
 
+            # CHANGED:
+            # Проверяем content,
+            # а не старый summary.
             self._validate_numeric_literals(
-                text=block.summary,
+                text=block.content,
                 transcript=transcript,
-                path=f'{block_path}.summary',
+                path=(
+                    f'{block_path}.'
+                    'content'
+                ),
                 issues=issues,
             )
 
-            for resolution_index, resolution in enumerate(
+            for (
+                resolution_index,
+                resolution,
+            ) in enumerate(
                 block.resolutions
             ):
                 resolution_path = (
@@ -83,7 +117,9 @@ class SemanticGuard:
                 )
 
                 self._validate_deadline(
-                    deadline=resolution.deadline,
+                    deadline=(
+                        resolution.deadline
+                    ),
                     normalized_transcript=(
                         normalized_transcript
                     ),
@@ -98,31 +134,53 @@ class SemanticGuard:
                     text=resolution.text,
                     transcript=transcript,
                     path=(
-                        f'{resolution_path}.text'
+                        f'{resolution_path}.'
+                        'text'
                     ),
                     issues=issues,
                 )
 
-        for index, text in enumerate(
-            extraction.unresolved_questions
+        # Проверяем служебные места
+        # ручной проверки.
+        for (
+            index,
+            item,
+        ) in enumerate(
+            extraction.manual_review
         ):
-            self._validate_numeric_literals(
-                text=text,
-                transcript=transcript,
+            item_path = (
+                f'manual_review[{index}]'
+            )
+
+            self._validate_speaker(
+                speaker=item.speaker_id,
+                speakers=speakers,
                 path=(
-                    f'unresolved_questions[{index}]'
+                    f'{item_path}.'
+                    'speaker_id'
                 ),
                 issues=issues,
             )
 
-        for index, text in enumerate(
-            extraction.ambiguous_fragments
-        ):
-            self._validate_numeric_literals(
-                text=text,
+            self._validate_timestamp(
+                timestamp=item.timestamp,
                 transcript=transcript,
                 path=(
-                    f'ambiguous_fragments[{index}]'
+                    f'{item_path}.'
+                    'timestamp'
+                ),
+                issues=issues,
+            )
+
+            # Если Qwen переписала сомнительное
+            # число в fragment, guard также
+            # сможет это заметить.
+            self._validate_numeric_literals(
+                text=item.fragment,
+                transcript=transcript,
+                path=(
+                    f'{item_path}.'
+                    'fragment'
                 ),
                 issues=issues,
             )
@@ -151,7 +209,7 @@ class SemanticGuard:
                 path=path,
                 value=speaker,
                 message=(
-                    'Qwen использовал SPEAKER, '
+                    'Qwen использовал speaker, '
                     'которого нет в transcript.'
                 ),
             )
@@ -192,6 +250,44 @@ class SemanticGuard:
             )
         )
 
+    # NEW:
+    # Таймкод manual_review должен
+    # реально существовать в transcript.
+    @staticmethod
+    def _validate_timestamp(
+            timestamp: str,
+            transcript: str,
+            path: str,
+            issues: list[GuardIssue],
+    ) -> None:
+        value = (
+            timestamp
+            .strip()
+            .strip('[]')
+        )
+
+        expected = (
+            f'[{value}]'
+        )
+
+        if expected in transcript:
+            return
+
+        issues.append(
+            GuardIssue(
+                severity='error',
+                code=(
+                    'unsupported_timestamp'
+                ),
+                path=path,
+                value=timestamp,
+                message=(
+                    'Таймкод ручной проверки '
+                    'не найден в transcript.'
+                ),
+            )
+        )
+
     def _validate_numeric_literals(
             self,
             text: str,
@@ -200,7 +296,8 @@ class SemanticGuard:
             issues: list[GuardIssue],
     ) -> None:
         values = (
-            self.NUMERIC_LITERAL_PATTERN
+            self
+            .NUMERIC_LITERAL_PATTERN
             .findall(text)
         )
 

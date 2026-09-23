@@ -60,11 +60,16 @@ class ProtocolDocxGenerator:
             end_paragraph=end_marker,
         )
 
-        for block in extraction.heard:
-            self._insert_heard_block(
+        for block in extraction.protocol_blocks:
+            self._insert_protocol_block(
                 anchor=end_marker,
                 block=block,
             )
+
+        self._insert_manual_review(
+            anchor=end_marker,
+            items=extraction.manual_review,
+        )
 
         self._remove_paragraph(end_marker)
 
@@ -92,7 +97,7 @@ class ProtocolDocxGenerator:
             f"Paragraph was not found in {text}"
         )
 
-    # Функция для удаления текста заглушек
+    # Удаление заглушек шаблона
     def _remove_placeholder_blocks(
             self,
             doc,
@@ -118,7 +123,7 @@ class ProtocolDocxGenerator:
         ]:
             self._remove_paragraph(paragraph)
 
-    # Функция, удаляющая строку
+    # Удаление строки
     @staticmethod
     def _remove_paragraph(paragraph):
         element = paragraph._element
@@ -145,14 +150,12 @@ class ProtocolDocxGenerator:
         return run
 
     # Вставка текста
-    def _insert_heard_block(
+    def _insert_protocol_block(
             self,
             anchor,
             block,
     ):
-        speaker_paragraph = (
-            anchor.insert_paragraph_before()
-        )
+        speaker_paragraph = anchor.insert_paragraph_before()
 
         self._add_run(
             speaker_paragraph,
@@ -160,25 +163,19 @@ class ProtocolDocxGenerator:
             bold=True,
         )
 
-        summary_paragraph = (
-            anchor.insert_paragraph_before()
-        )
-
-        summary_paragraph.alignment = (
-            WD_ALIGN_PARAGRAPH.JUSTIFY
-        )
+        content_paragraph = anchor.insert_paragraph_before()
+        content_paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
         self._add_run(
-            summary_paragraph,
-            block.summary,
+            content_paragraph,
+            block.content,
         )
 
+        # Если итогового решения нет - раздел "Решения" не создаём
         if not block.resolutions:
             return
 
-        decision_heading = (
-            anchor.insert_paragraph_before()
-        )
+        decision_heading = anchor.insert_paragraph_before()
 
         self._add_run(
             decision_heading,
@@ -187,41 +184,113 @@ class ProtocolDocxGenerator:
         )
 
         for resolution in block.resolutions:
-            resolution_paragraph = (
-                anchor.insert_paragraph_before()
-            )
+            resolution_paragraph = anchor.insert_paragraph_before()
 
             self._add_run(
                 resolution_paragraph,
-                self._format_resolution(resolution),
+                self._format_resolution(resolution=resolution),
             )
 
-    # Вставка оглавления (Спикера/Докладчика)
+    # Служебный раздел ручной проверки.
+    def _insert_manual_review(
+            self,
+            anchor,
+            items,
+    ) -> None:
+        heading = anchor.insert_paragraph_before()
+
+        self._add_run(
+            heading,
+            'МЕСТА ДЛЯ РУЧНОЙ ПРОВЕРКИ',
+            bold=True,
+        )
+
+        note = anchor.insert_paragraph_before()
+
+        self._add_run(
+            note,
+            (
+                'Служебный раздел. '
+                'Не является частью официального протокола.'
+            ),
+            italic=True,
+        )
+
+        # Раздел создаётся всегда, даже если сомнительных мест нет.
+        if not items:
+            paragraph = anchor.insert_paragraph_before()
+
+            self._add_run(paragraph, 'Сомнительных фрагментов не выявлено.')
+
+            return
+
+        for item in items:
+            paragraph = anchor.insert_paragraph_before()
+
+            speaker = self._format_speaker_id(item.speaker_id)
+
+            timestamp = self._format_timestamp(item.timestamp)
+
+
+            text = (
+                f'{timestamp} '
+                f'{speaker}. '
+                f'Тип проверки: '
+                f'{item.check_type}. '
+                f'Исходный фрагмент: '
+                f'«{item.fragment}»'
+            )
+
+            self._add_run(
+                paragraph,
+                text,
+            )
+
+    # Заголовок спикера.
     @classmethod
-    def _speaker_heading(cls, block) -> str:
+    def _speaker_heading(
+            cls,
+            block,
+    ) -> str:
         if block.speaker_name:
             return block.speaker_name
 
-        return cls._format_speaker_id(
-            block.speaker_id
-        )
+        return cls._format_speaker_id(block.speaker_id)
 
     # Форматирование Спикера, если не нашёл имя
     @staticmethod
     def _format_speaker_id(speaker_id: str) -> str:
+        if speaker_id == 'UNKNOWN':
+            return 'Неизвестный спикер'
+
         try:
-            number = int(
-                speaker_id.rsplit('_', 1)[1]
-            )
+            number = int(speaker_id.rsplit('_', 1)[1])
 
-            return f'Спикер {number + 1}'
+            return f'Спикер №{number + 1}'
 
-        except (ValueError, IndexError):
-            return 'Спикер'
+        except (
+                ValueError,
+                IndexError,
+                AttributeError,
+        ):
+            return 'Неизвестный спикер'
+
+    # Не допускаем двойные скобки.
+    @staticmethod
+    def _format_timestamp(
+            timestamp: str,
+    ) -> str:
+        value = (
+            timestamp
+            .strip()
+            .strip('[]')
+        )
+
+        return f'[{value}]'
 
     # Форматирование решений
-    @staticmethod
-    def _format_resolution(resolution) -> str:
+    @classmethod
+    def _format_resolution(cls, resolution) -> str:
         parts = [
             resolution.text.rstrip('.')
         ]
@@ -230,6 +299,15 @@ class ProtocolDocxGenerator:
             parts.append(
                 f'Ответственный — '
                 f'{resolution.responsible_name}'
+            )
+
+        elif resolution.responsible_speaker:
+            parts.append(
+                'Ответственный — '
+                + cls._format_speaker_id(
+                    resolution
+                    .responsible_speaker
+                )
             )
 
         if resolution.deadline:

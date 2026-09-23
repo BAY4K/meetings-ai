@@ -21,8 +21,8 @@ class LlmSettings:
     model_name: str = 'qwen3.5:9b-q4_K_M'
     base_url: str = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
 
-    timeout: float = 300.0
-    num_ctx: int = 8192
+    timeout: float = 900.0
+    num_ctx: int = 12288
 
 
 @dataclass(frozen=True)

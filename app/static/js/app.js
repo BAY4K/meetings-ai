@@ -70,7 +70,8 @@ async function processMeeting() {
 
     resetResult();
 
-    elements.processButton.disabled = true;
+    elements.processButton.disabled =
+        true;
 
     showStatus(
         "Обработка записи. "
@@ -89,9 +90,8 @@ async function processMeeting() {
         elements.speakerCount.value;
 
 
-    // Если выбран Auto, поле вообще не отправляем.
-    // Тогда FastAPI получит: num_speakers = None
-    // и Transcriber включит auto mode.
+    // Если выбран Auto, поле
+    // вообще не отправляем.
     if (speakerCount) {
         formData.append(
             "num_speakers",
@@ -99,8 +99,9 @@ async function processMeeting() {
         );
     }
 
+
     const hotwords =
-    elements.hotwords.value.trim();
+        elements.hotwords.value.trim();
 
     if (hotwords) {
         formData.append(
@@ -108,6 +109,7 @@ async function processMeeting() {
             hotwords
         );
     }
+
 
     try {
         const response = await fetch(
@@ -127,14 +129,23 @@ async function processMeeting() {
             );
         }
 
-        const job = await response.json();
+        const job =
+            await response.json();
 
-        showStatus(job.message || "Задача создана...")
+        showStatus(
+            job.message
+            || "Задача создана..."
+        );
 
-        const result = await waitForJob(job.status_url);
+        const result =
+            await waitForJob(
+                job.status_url
+            );
 
 
-        renderResult(result);
+        renderResult(
+            result
+        );
 
         showStatus(
             "Обработка завершена.",
@@ -142,7 +153,9 @@ async function processMeeting() {
         );
 
     } catch (error) {
-        console.error(error);
+        console.error(
+            error
+        );
 
         showStatus(
             error.message
@@ -156,10 +169,13 @@ async function processMeeting() {
     }
 }
 
-async function waitForJob(status_url) {
+
+async function waitForJob(
+    statusUrl
+) {
     while (true) {
         const response = await fetch(
-            status_url,
+            statusUrl,
             {
                 method: "GET",
             }
@@ -176,18 +192,18 @@ async function waitForJob(status_url) {
         const job =
             await response.json();
 
-        // Показываем текущее сообщение backend.
+
         if (job.message) {
             showStatus(
                 job.message
             );
         }
 
-        // ВАЖНО:
-        // completed проверяем ДО проверки
-        // неизвестного статуса.
 
-        if (job.status === "completed") {
+        if (
+            job.status ===
+            "completed"
+        ) {
             if (!job.result) {
                 throw new Error(
                     "Задача завершена, "
@@ -195,21 +211,21 @@ async function waitForJob(status_url) {
                 );
             }
 
-            // Выходим из polling
-            // и возвращаем готовый результат
-            // обратно в processMeeting().
             return job.result;
         }
 
 
-        // Если backend сообщил об ошибке.
-        if (job.status === "failed") {
+        if (
+            job.status ===
+            "failed"
+        ) {
             throw new Error(
                 job.error
                 || job.message
                 || "Обработка завершилась ошибкой."
             );
         }
+
 
         if (
             job.status !== "queued"
@@ -221,16 +237,26 @@ async function waitForJob(status_url) {
         }
 
 
-        // Следующий запрос через 5 секунд.
-        await sleep(5000);
+        await sleep(
+            5000
+        );
     }
 }
 
+
 function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(
+        resolve => setTimeout(
+            resolve,
+            ms
+        )
+    );
 }
 
-async function getErrorMessage(response) {
+
+async function getErrorMessage(
+    response
+) {
     try {
         const data =
             await response.json();
@@ -250,53 +276,76 @@ async function getErrorMessage(response) {
 
 
 function renderResult(data) {
-    elements.resultContainer.classList.remove(
-        "hidden"
-    );
+    elements
+        .resultContainer
+        .classList
+        .remove("hidden");
+
 
     elements.transcript.textContent =
         data.transcript || "";
+
 
     renderExtraction(
         data.extraction
     );
 
+
     if (data.download_url) {
         elements.downloadButton.href =
             data.download_url;
 
-        elements.downloadButton.classList.remove(
-            "hidden"
-        );
+        elements
+            .downloadButton
+            .classList
+            .remove("hidden");
     }
 }
 
 
-function renderExtraction(extraction) {
-    elements.protocolBlocks.replaceChildren();
+// CHANGED:
+// Новый extraction содержит:
+// protocol_blocks + manual_review.
+function renderExtraction(
+    extraction
+) {
+    elements
+        .protocolBlocks
+        .replaceChildren();
 
-    if (
-        !extraction
-        || !Array.isArray(extraction.heard)
-    ) {
+    if (!extraction) {
         return;
     }
 
 
-    for (const block of extraction.heard) {
-        elements.protocolBlocks.appendChild(
-            createProtocolBlock(block)
-        );
+    const blocks =
+        Array.isArray(
+            extraction.protocol_blocks
+        )
+            ? extraction.protocol_blocks
+            : [];
+
+
+    for (const block of blocks) {
+        elements
+            .protocolBlocks
+            .appendChild(
+                createProtocolBlock(
+                    block
+                )
+            );
     }
 
 
-    renderWarnings(
-        extraction
+    renderManualReview(
+        extraction.manual_review
     );
 }
 
 
-function createProtocolBlock(block) {
+function createProtocolBlock(
+    block
+) {
     const container =
         document.createElement(
             "article"
@@ -315,36 +364,51 @@ function createProtocolBlock(block) {
         "protocol-speaker";
 
     speaker.textContent =
-        getSpeakerName(block);
+        getSpeakerName(
+            block
+        );
 
     container.appendChild(
         speaker
     );
 
 
-    const summary =
+    const content =
         document.createElement(
             "p"
         );
 
-    summary.className =
+    // CSS-класс оставляем старым,
+    // чтобы не пришлось менять
+    // styles.css.
+    //
+    // По смыслу это уже НЕ summary.
+    content.className =
         "protocol-summary";
 
-    summary.textContent =
-        block.summary || "";
+    // CHANGED:
+    // summary -> content.
+    content.textContent =
+        block.content || "";
 
     container.appendChild(
-        summary
+        content
     );
 
 
     const resolutions =
-        Array.isArray(block.resolutions)
+        Array.isArray(
+            block.resolutions
+        )
             ? block.resolutions
             : [];
 
 
-    if (resolutions.length === 0) {
+    // Если итогового решения нет,
+    // заголовок "Решение" не выводим.
+    if (
+        resolutions.length === 0
+    ) {
         return container;
     }
 
@@ -381,7 +445,9 @@ function createProtocolBlock(block) {
 }
 
 
-function createResolution(resolution) {
+function createResolution(
+    resolution
+) {
     const container =
         document.createElement(
             "div"
@@ -440,7 +506,10 @@ function createResolution(resolution) {
             "resolution-meta";
 
 
-        for (const value of metadata) {
+        for (
+            const value
+            of metadata
+        ) {
             const item =
                 document.createElement(
                     "span"
@@ -465,7 +534,9 @@ function createResolution(resolution) {
 }
 
 
-function getSpeakerName(block) {
+function getSpeakerName(
+    block
+) {
     if (block.speaker_name) {
         return block.speaker_name;
     }
@@ -483,13 +554,15 @@ function getResponsibleName(
         resolution.responsible_name
     ) {
         return (
-            resolution.responsible_name
+            resolution
+                .responsible_name
         );
     }
 
 
     if (
-        resolution.responsible_speaker
+        resolution
+            .responsible_speaker
     ) {
         return formatSpeakerId(
             resolution
@@ -502,11 +575,28 @@ function getResponsibleName(
 }
 
 
+// CHANGED:
+// Теперь формат соответствует
+// "Спикер №N".
+//
+// UNKNOWN показываем как
+// "Неизвестный спикер".
 function formatSpeakerId(
     speakerId
 ) {
+    if (
+        speakerId === "UNKNOWN"
+    ) {
+        return (
+            "Неизвестный спикер"
+        );
+    }
+
+
     if (!speakerId) {
-        return "Спикер";
+        return (
+            "Неизвестный спикер"
+        );
     }
 
 
@@ -517,123 +607,147 @@ function formatSpeakerId(
 
 
     if (!match) {
-        return "Спикер";
+        return (
+            "Неизвестный спикер"
+        );
     }
 
 
     return (
-        `Спикер ${Number(match[1]) + 1}`
+        `Спикер №${Number(match[1]) + 1}`
     );
 }
 
 
-function renderWarnings(extraction) {
+// NEW:
+// Вместо unresolved_questions
+// и ambiguous_fragments показываем
+// служебный блок.
+function renderManualReview(
+    manualReview
+) {
     elements.warnings.replaceChildren();
 
+    elements
+        .warningsCard
+        .classList
+        .remove("hidden");
 
-    const unresolved =
+
+    const items =
         Array.isArray(
-            extraction
-                .unresolved_questions
+            manualReview
         )
-            ? extraction
-                .unresolved_questions
+            ? manualReview
             : [];
 
 
-    const ambiguous =
-        Array.isArray(
-            extraction
-                .ambiguous_fragments
-        )
-            ? extraction
-                .ambiguous_fragments
-            : [];
+    if (items.length === 0) {
+        const empty =
+            document.createElement(
+                "p"
+            );
 
+        empty.className =
+            "muted";
 
-    if (
-        unresolved.length === 0
-        && ambiguous.length === 0
-    ) {
-        elements.warningsCard.classList.add(
-            "hidden"
+        empty.textContent =
+            "Сомнительных фрагментов "
+            + "не выявлено.";
+
+        elements.warnings.appendChild(
+            empty
         );
 
         return;
     }
 
 
-    elements.warningsCard.classList.remove(
-        "hidden"
-    );
-
-
-    if (unresolved.length > 0) {
+    for (const item of items) {
         elements.warnings.appendChild(
-            createWarningGroup(
-                "Нерешённые вопросы",
-                unresolved
-            )
-        );
-    }
-
-
-    if (ambiguous.length > 0) {
-        elements.warnings.appendChild(
-            createWarningGroup(
-                "Неоднозначные фрагменты",
-                ambiguous
+            createManualReviewItem(
+                item
             )
         );
     }
 }
 
 
-function createWarningGroup(
-    title,
-    values
+// NEW:
+function createManualReviewItem(
+    item
 ) {
-    const group =
+    const container =
         document.createElement(
-            "section"
+            "div"
         );
 
-    group.className =
-        "warning-group";
+    container.className =
+        "warning";
 
 
-    const heading =
+    const meta =
         document.createElement(
-            "h3"
+            "div"
         );
 
-    heading.textContent =
-        title;
+    const timestamp =
+        formatTimestamp(
+            item.timestamp
+        );
 
-    group.appendChild(
-        heading
+    const speaker =
+        formatSpeakerId(
+            item.speaker_id
+        );
+
+    meta.textContent =
+        `${timestamp} ${speaker} — `
+        + `${item.check_type || "проверка"}`;
+
+    meta.style.fontWeight =
+        "bold";
+
+    container.appendChild(
+        meta
     );
 
 
-    for (const value of values) {
-        const warning =
-            document.createElement(
-                "div"
-            );
-
-        warning.className =
-            "warning";
-
-        warning.textContent =
-            value;
-
-        group.appendChild(
-            warning
+    const fragment =
+        document.createElement(
+            "div"
         );
+
+    fragment.textContent =
+        item.fragment || "";
+
+    fragment.style.marginTop =
+        "6px";
+
+    container.appendChild(
+        fragment
+    );
+
+
+    return container;
+}
+
+
+// NEW:
+function formatTimestamp(
+    timestamp
+) {
+    if (!timestamp) {
+        return "";
     }
 
+    const value =
+        String(timestamp)
+            .trim()
+            .replace(/^\[/, "")
+            .replace(/\]$/, "");
 
-    return group;
+    return `[${value}]`;
 }
 
 
@@ -641,53 +755,70 @@ function showStatus(
     message,
     type = null
 ) {
-    elements.statusCard.classList.remove(
-        "hidden"
-    );
+    elements
+        .statusCard
+        .classList
+        .remove("hidden");
+
 
     elements.statusText.textContent =
         message;
 
-    elements.statusText.classList.remove(
-        "success",
-        "error"
-    );
+
+    elements
+        .statusText
+        .classList
+        .remove(
+            "success",
+            "error"
+        );
 
 
     if (type) {
-        elements.statusText.classList.add(
-            type
-        );
+        elements
+            .statusText
+            .classList
+            .add(type);
     }
 }
 
 
 function resetResult() {
-    elements.resultContainer.classList.add(
-        "hidden"
-    );
+    elements
+        .resultContainer
+        .classList
+        .add("hidden");
 
 
-    elements.protocolBlocks.replaceChildren();
+    elements
+        .protocolBlocks
+        .replaceChildren();
 
-    elements.warnings.replaceChildren();
+
+    elements
+        .warnings
+        .replaceChildren();
 
 
-    elements.warningsCard.classList.add(
-        "hidden"
-    );
+    elements
+        .warningsCard
+        .classList
+        .add("hidden");
 
 
     elements.transcript.textContent =
         "";
 
 
-    elements.downloadButton.classList.add(
-        "hidden"
-    );
+    elements
+        .downloadButton
+        .classList
+        .add("hidden");
 
 
-    elements.downloadButton.removeAttribute(
-        "href"
-    );
+    elements
+        .downloadButton
+        .removeAttribute(
+            "href"
+        );
 }

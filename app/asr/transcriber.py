@@ -735,23 +735,15 @@ class Transcriber:
                                 ),
                         })
 
-                    current_speaker = (
-                        speaker
-                    )
+                    current_speaker = speaker
 
                     current_words = []
 
-                    start_time = (
-                        word.get('start')
-                    )
+                    start_time = word.get('start')
 
-                current_words.append(
-                    text
-                )
+                current_words.append(text)
 
-                word_end = word.get(
-                    'end'
-                )
+                word_end = word.get('end')
 
                 if word_end is not None:
                     end_time = word_end
